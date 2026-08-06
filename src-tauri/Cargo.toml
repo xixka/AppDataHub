@@ -1,0 +1,56 @@
+[package]
+name = "appdatahub"
+version = "0.1.0"
+description = "AppDataHub — Windows 应用数据切换工具"
+authors = ["xixka"]
+edition = "2021"
+
+[lib]
+name = "appdatahub_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[dependencies]
+# 核心依赖 (无 Tauri)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+thiserror = "1"
+base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
+
+# Tauri (仅 tauri feature 下启用)
+tauri = { version = "2", features = [], optional = true }
+tauri-plugin-shell = { version = "2", optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-fs = { version = "2", optional = true }
+
+[features]
+default = ["tauri-runtime"]
+# Tauri 运行时 (GUI) — 需要 GTK/WebKit 系统依赖
+tauri-runtime = [
+    "dep:tauri",
+    "dep:tauri-plugin-shell",
+    "dep:tauri-plugin-dialog",
+    "dep:tauri-plugin-fs",
+    "dep:tauri-build",
+]
+# 仅核心逻辑 (CI/测试用, 无需系统依赖)
+core-only = []
+
+[[bin]]
+name = "appdatahub"
+path = "src/main.rs"
+required-features = ["tauri-runtime"]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
