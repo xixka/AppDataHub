@@ -27,6 +27,7 @@ const els = {
     settingsCancel: $('settings-cancel'),
     inputConfigDir: $('input-config-dir'),
     inputDataDir: $('input-data-dir'),
+    selectProfile: $('select-profile'),
     btnDetectPaths: $('btn-detect-paths'),
     toastContainer: $('toast-container'),
 };
@@ -221,6 +222,29 @@ async function loadProfileInfo() {
     }
 }
 
+async function loadProfileList() {
+    try {
+        const profiles = await invoke('list_profiles');
+        els.selectProfile.innerHTML = profiles.map((p, i) =>
+            `<option value="${i}">${escapeHtml(p.name)} — ${escapeHtml(p.config_dir)}</option>`
+        ).join('');
+    } catch (e) {
+        els.selectProfile.innerHTML = '<option>加载失败</option>';
+    }
+}
+
+async function onProfileChange() {
+    const index = parseInt(els.selectProfile.value, 10);
+    if (isNaN(index)) return;
+    try {
+        await invoke('select_profile', { index });
+        await loadProfileInfo();
+        toast('已切换 Profile', 'success');
+    } catch (e) {
+        toast('切换 Profile 失败: ' + e, 'error');
+    }
+}
+
 async function checkAppRunning() {
     try {
         const running = await invoke('check_app_running');
@@ -235,6 +259,7 @@ async function checkAppRunning() {
 }
 
 function openSettings() {
+    loadProfileList();
     els.modalSettings.style.display = 'flex';
 }
 
@@ -244,10 +269,13 @@ function closeSettings() {
 
 async function detectPaths() {
     try {
-        const info = await invoke('detect_profile');
-        els.inputConfigDir.value = info.config_dir;
-        els.inputDataDir.value = info.user_dir || '(无)';
-        toast('检测完成', 'success');
+        const detected = await invoke('detect_profile');
+        if (!detected || detected.length === 0) {
+            toast('未检测到已安装的应用 (Trae / VS Code / Cursor)', 'error');
+            return;
+        }
+        const names = detected.map(p => p.name).join('、');
+        toast(`检测到: ${names}，请重新打开设置选择 Profile`, 'success');
     } catch (e) {
         toast('检测失败: ' + e, 'error');
     }
@@ -263,6 +291,7 @@ els.modalSave.onclick = saveAccount;
 els.modalAccount.onclick = (e) => { if (e.target === els.modalAccount) closeAccountModal(); };
 els.settingsClose.onclick = closeSettings;
 els.settingsCancel.onclick = closeSettings;
+els.selectProfile.onchange = onProfileChange;
 els.btnDetectPaths.onclick = detectPaths;
 els.modalSettings.onclick = (e) => { if (e.target === els.modalSettings) closeSettings(); };
 els.inputName.onkeydown = (e) => { if (e.key === 'Enter') saveAccount(); };

@@ -61,6 +61,41 @@ pub struct ProfileConfig {
     pub skip_items: Vec<String>,
 }
 
+/// 内置应用配置 — 预置常见 Windows 应用
+pub fn builtin_profiles() -> Vec<ProfileConfig> {
+    vec![
+        ProfileConfig {
+            name: "Trae".into(),
+            config_dir: "%APPDATA%/Trae".into(),
+            user_dir: Some("%USERPROFILE%/.trae".into()),
+            process_names: vec!["Trae.exe".into()],
+            skip_items: default_skip_items(),
+        },
+        ProfileConfig {
+            name: "VS Code".into(),
+            config_dir: "%APPDATA%/Code".into(),
+            user_dir: Some("%USERPROFILE%/.vscode".into()),
+            process_names: vec!["Code.exe".into()],
+            skip_items: default_skip_items(),
+        },
+        ProfileConfig {
+            name: "Cursor".into(),
+            config_dir: "%APPDATA%/Cursor".into(),
+            user_dir: Some("%USERPROFILE%/.cursor".into()),
+            process_names: vec!["Cursor.exe".into()],
+            skip_items: default_skip_items(),
+        },
+    ]
+}
+
+/// 检测已安装的内置应用 — 返回实际存在的 profile
+pub fn detect_installed_profiles() -> Vec<ProfileConfig> {
+    builtin_profiles()
+        .into_iter()
+        .filter(|p| expand_env(&p.config_dir).exists())
+        .collect()
+}
+
 /// 运行时展开后的应用配置
 #[derive(Debug, Clone, Serialize)]
 pub struct AppProfile {

@@ -111,12 +111,18 @@
                         <label>用户数据目录</label>
                         <input type="text" id="input-data-dir" readonly>
                     </div>
+                    <div class="form-group">
+                        <label>应用 Profile</label>
+                        <select id="select-profile" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg-secondary);">
+                        </select>
+                    </div>
                     <div class="form-actions">
-                        <button class="btn btn-ghost btn-sm" id="btn-detect-paths">自动检测</button>
+                        <button class="btn btn-ghost btn-sm" id="btn-detect-paths">重新检测已安装应用</button>
                     </div>
                     <div class="info-box">
                         <p><strong>说明:</strong></p>
-                        <p>账号切换时，工具会自动备份当前配置并恢复目标账号的配置。</p>
+                        <p>首次启动会自动检测已安装的应用 (Trae / VS Code / Cursor) 并生成 profiles.json。</p>
+                        <p>切换账号时，工具会备份当前配置目录并恢复目标账号的配置。</p>
                         <p>请确保切换时目标应用已关闭，否则配置可能无法正确生效。</p>
                     </div>
                 </div>

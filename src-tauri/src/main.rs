@@ -54,7 +54,22 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
                     _ => AppProfile::custom(data_dir.join("default"), None),
                 }
             } else {
-                AppProfile::custom(data_dir.join("default"), None)
+                // 首次启动：自动检测已安装的应用并写入 profiles.json
+                let detected = appdatahub_lib::config::detect_installed_profiles();
+                let configs: Vec<appdatahub_lib::config::ProfileConfig> = if detected.is_empty() {
+                    // 未检测到已安装应用，使用内置默认列表
+                    appdatahub_lib::config::builtin_profiles()
+                } else {
+                    detected
+                };
+                let _ = std::fs::create_dir_all(&data_dir);
+                let _ = std::fs::write(
+                    &profiles_file,
+                    serde_json::to_string_pretty(&configs).unwrap_or_else(|_| "[]".into()),
+                );
+                AppProfile::from_config(&configs[0]).unwrap_or_else(|_| {
+                    AppProfile::custom(data_dir.join("default"), None)
+                })
             };
 
             let mut store = Store::new(data_dir, profile);
@@ -77,6 +92,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             commands::list_profiles,
             commands::select_profile,
             commands::check_app_running,
+            commands::detect_profile,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| format!("Tauri 启动失败: {}", e).into())

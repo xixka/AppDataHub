@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use tauri::State;
 
 use crate::account::AccountMetadata;
-use crate::config::ProfileConfig;
+use crate::config::{self, ProfileConfig};
 use crate::store::{Store, StoreError};
 
 #[derive(Debug, thiserror::Error)]
@@ -167,6 +167,12 @@ pub fn check_app_running(
         .lock()
         .map_err(|e| CommandError::Store(e.to_string()))?;
     Ok(store.is_app_running())
+}
+
+/// 自动检测已安装的应用 — 返回实际存在的 profiles
+#[tauri::command]
+pub fn detect_profile() -> Result<Vec<ProfileConfig>, CommandError> {
+    Ok(config::detect_installed_profiles())
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
