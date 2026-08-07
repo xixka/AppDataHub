@@ -17,7 +17,6 @@ pub struct Account {
     pub token_enc: Option<String>,
     pub created_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
-    pub is_active: bool,
     pub has_snapshot: bool,
 }
 
@@ -32,7 +31,6 @@ pub struct AccountMetadata {
     pub has_snapshot: bool,
     pub created_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
-    pub is_active: bool,
 }
 
 impl Account {
@@ -47,7 +45,6 @@ impl Account {
             token_enc: None,
             created_at: Utc::now(),
             last_used_at: None,
-            is_active: false,
             has_snapshot: false,
         }
     }
@@ -64,7 +61,6 @@ impl From<&Account> for AccountMetadata {
             has_snapshot: acc.has_snapshot,
             created_at: acc.created_at,
             last_used_at: acc.last_used_at,
-            is_active: acc.is_active,
         }
     }
 }

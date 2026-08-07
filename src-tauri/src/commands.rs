@@ -366,7 +366,6 @@ pub fn reset_machine_id(
         token_enc: None,
         created_at: chrono::Utc::now(),
         last_used_at: None,
-        is_active: false,
         has_snapshot: false,
     };
     let snapshot_dir = store.snapshots_dir().join(&plugin_id).join("__reset__");

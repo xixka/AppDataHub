@@ -1,5 +1,5 @@
 <template>
-  <el-card class="account-card" :class="{ active: account.is_active }" shadow="hover">
+  <el-card class="account-card" shadow="hover">
     <div class="card-body">
       <div class="card-left">
         <el-avatar :size="40" :src="avatarUrl">
@@ -9,7 +9,6 @@
       <div class="card-center">
         <div class="card-name">
           {{ account.name }}
-          <el-tag v-if="account.is_active" size="small" type="success">当前</el-tag>
         </div>
         <div class="card-meta">
           <span v-if="account.email">{{ account.email }}</span>
@@ -21,7 +20,6 @@
         <el-button
           type="primary"
           size="small"
-          :disabled="account.is_active"
           :loading="accountStore.switching"
           @click="$emit('switch', account.id)"
         >

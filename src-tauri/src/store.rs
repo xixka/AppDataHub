@@ -229,41 +229,11 @@ impl Store {
         account_id: &str,
         plugin: &PluginConfig,
     ) -> Result<crate::flow::FlowResult, StoreError> {
-        // 1. 先备份当前活跃账号的快照
-        let current_active = self.data.accounts.iter()
-            .find(|a| a.plugin_id == plugin.id && a.is_active)
-            .cloned();
-        if let Some(cur) = &current_active {
-            if cur.id != account_id {
-                let cur_snapshot_dir = self.snapshots_dir.join(&plugin.id).join(&cur.name);
-                let cur_ctx = FlowContext {
-                    plugin: plugin.clone(),
-                    account: cur.clone(),
-                    snapshot_dir: cur_snapshot_dir,
-                    settings: self.data.settings.clone(),
-                };
-                let backup_step = crate::plugin::FlowStep::BackupCurrent;
-                let _ = flow::execute_flow(&cur_ctx, std::slice::from_ref(&backup_step));
-                // 标记当前账号有快照
-                if let Some(a) = self.data.accounts.iter_mut().find(|a| a.id == cur.id) {
-                    a.has_snapshot = true;
-                }
-            }
-        }
-
-        // 2. 取消当前活跃
-        for acc in &mut self.data.accounts {
-            if acc.plugin_id == plugin.id {
-                acc.is_active = false;
-            }
-        }
-
-        // 3. 设置目标账号为活跃
+        // 直接用目标账号执行切换流程，不依赖"当前活跃"判断
         let snapshot_dir = self.snapshots_dir.join(&plugin.id).join(
             self.get_account(account_id)?.name.clone()
         );
         let acc = self.get_account_mut(account_id)?;
-        acc.is_active = true;
         acc.last_used_at = Some(Utc::now());
         let ctx = FlowContext {
             plugin: plugin.clone(),
@@ -272,7 +242,6 @@ impl Store {
             settings: self.data.settings.clone(),
         };
 
-        // 4. 执行切换流程 (restore_snapshot + write_machine_id)
         let result = flow::execute_flow(&ctx, &plugin.switch_flow);
 
         self.save()?;
@@ -293,7 +262,6 @@ impl Store {
             token_enc: None,
             created_at: Utc::now(),
             last_used_at: None,
-            is_active: false,
             has_snapshot: false,
         };
 

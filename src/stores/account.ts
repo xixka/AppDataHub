@@ -11,10 +11,6 @@ export const useAccountStore = defineStore("accounts", () => {
   const loading = ref(false);
   const switching = ref(false);
 
-  const activeAccount = computed(
-    () => accounts.value.find((a) => a.is_active) ?? null,
-  );
-
   async function load(pluginId: string) {
     loading.value = true;
     try {
@@ -78,7 +74,6 @@ export const useAccountStore = defineStore("accounts", () => {
     accounts,
     loading,
     switching,
-    activeAccount,
     load,
     add,
     update,

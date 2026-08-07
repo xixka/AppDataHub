@@ -67,7 +67,6 @@ export interface Account {
   token_enc: string | null;
   created_at: string;
   last_used_at: string | null;
-  is_active: boolean;
 }
 
 /** 账号元数据 (列表用) */
@@ -80,7 +79,6 @@ export interface AccountMetadata {
   has_snapshot: boolean;
   created_at: string;
   last_used_at: string | null;
-  is_active: boolean;
 }
 
 /** 插件信息 */
