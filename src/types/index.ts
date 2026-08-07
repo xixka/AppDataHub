@@ -45,6 +45,7 @@ export type FlowStep =
   | { type: "restore_snapshot" }
   | { type: "write_machine_id" }
   | { type: "reset_machine_id" }
+  | { type: "regenerate_machine_id" }
   | { type: "delete_login_artifacts" }
   | { type: "launch_exe" }
   | { type: "sleep"; ms: number };

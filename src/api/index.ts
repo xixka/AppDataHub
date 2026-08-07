@@ -64,6 +64,9 @@ export const getMachineId = (pluginId: string) =>
   invoke<MachineIdInfo>("get_machine_id", { pluginId });
 export const resetMachineId = (pluginId: string) =>
   invoke<void>("reset_machine_id", { pluginId });
+/** 换新设备码: 生成全新随机 machineid 写入 + 同步 telemetry, 用于重新签到 */
+export const regenerateMachineId = (pluginId: string) =>
+  invoke<string>("regenerate_machine_id", { pluginId });
 
 // ===== 设置 =====
 export const getSettings = () => invoke<AppSettings>("get_settings");

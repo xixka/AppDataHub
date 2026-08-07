@@ -23,6 +23,9 @@
           <el-button @click="launchApp" :loading="launching">
             <el-icon><VideoPlay /></el-icon> 启动软件
           </el-button>
+          <el-button type="warning" @click="regenerateDeviceId" :loading="regenerating">
+            <el-icon><RefreshRight /></el-icon> 换新设备码
+          </el-button>
           <el-button type="danger" @click="clearLogin">
             <el-icon><Delete /></el-icon> 清空数据
           </el-button>
@@ -60,7 +63,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from "vue";
-import { Plus, VideoPlay, Delete } from "@element-plus/icons-vue";
+import { Plus, VideoPlay, Delete, RefreshRight } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { usePluginStore } from "@/stores/plugin";
 import { useAccountStore } from "@/stores/account";
@@ -89,6 +92,7 @@ async function checkRunning() {
 }
 
 const launching = ref(false);
+const regenerating = ref(false);
 
 async function launchApp() {
   if (!pluginStore.activePluginId) return;
@@ -117,6 +121,27 @@ async function clearLogin() {
     if (e !== "cancel" && e !== undefined) {
       ElMessage.error("清空失败: " + e);
     }
+  }
+}
+
+async function regenerateDeviceId() {
+  if (!pluginStore.activePluginId) return;
+  try {
+    await ElMessageBox.confirm(
+      "将生成全新的随机设备码并写入（用于重新签到领礼包）。请确保 TRAE SOLO CN 已关闭。确定继续？",
+      "换新设备码",
+      { type: "warning" },
+    );
+    regenerating.value = true;
+    const newId = await api.regenerateMachineId(pluginStore.activePluginId);
+    ElMessage.success(`已换新设备码 ${newId.slice(0, 8)}… 可重新签到`);
+    await checkRunning();
+  } catch (e) {
+    if (e !== "cancel" && e !== undefined) {
+      ElMessage.error("换码失败: " + e);
+    }
+  } finally {
+    regenerating.value = false;
   }
 }
 

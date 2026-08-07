@@ -92,6 +92,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             // 机器码
             commands::get_machine_id,
             commands::reset_machine_id,
+            commands::regenerate_machine_id,
             // 设置
             commands::get_settings,
             commands::update_settings,

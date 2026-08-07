@@ -73,6 +73,7 @@ fn step_label(step: &FlowStep) -> String {
         FlowStep::RestoreSnapshot => "restore_snapshot".into(),
         FlowStep::WriteMachineId => "write_machine_id".into(),
         FlowStep::ResetMachineId => "reset_machine_id".into(),
+        FlowStep::RegenerateMachineId => "regenerate_machine_id".into(),
         FlowStep::DeleteLoginArtifacts => "delete_login_artifacts".into(),
         FlowStep::LaunchExe => "launch_exe".into(),
         FlowStep::Sleep { ms } => format!("sleep({}ms)", ms),
@@ -88,6 +89,9 @@ fn execute_step(ctx: &FlowContext, step: &FlowStep) -> Result<(), PluginError> {
         FlowStep::RestoreSnapshot => restore_snapshot(ctx),
         FlowStep::WriteMachineId => write_machine_id(ctx),
         FlowStep::ResetMachineId => reset_machine_id(ctx),
+        FlowStep::RegenerateMachineId => {
+            regenerate_machine_id(ctx).map(|_| ())
+        }
         FlowStep::DeleteLoginArtifacts => delete_login_artifacts(ctx),
         FlowStep::LaunchExe => launch_exe(ctx),
         FlowStep::Sleep { ms } => {
@@ -250,6 +254,96 @@ pub fn reset_machine_id(ctx: &FlowContext) -> Result<(), PluginError> {
         }
         _ => Ok(()),
     }
+}
+
+/// 生成全新随机机器码并写入 (file/registry), 同时同步 storage.json 的
+/// telemetry.machineId / sqmId / devDeviceId —— 让目标应用认成全新设备,
+/// 从而能重新触发"新设备"礼包/签到。参考 Trae-Account-Manager 的做法。
+pub fn regenerate_machine_id(ctx: &FlowContext) -> Result<String, PluginError> {
+    let mid = &ctx.plugin.machine_id;
+    let new_id = uuid::Uuid::new_v4().to_string();
+
+    // 1. 写入新机器码到文件 / 注册表
+    write_machine_id_value(mid, &new_id)?;
+
+    // 2. 同步 storage.json 的 telemetry 字段 (若存在)
+    let _ = sync_trae_telemetry(ctx, &new_id);
+
+    Ok(new_id)
+}
+
+/// 遍历插件 data_dirs 查找 storage.json, 更新其中的 telemetry.machineId
+/// (= sha256(机器码)前32hex, 模拟 Trae 的 md5 风格)、telemetry.sqmId、
+/// telemetry.devDeviceId 为全新随机值。
+fn sync_trae_telemetry(ctx: &FlowContext, new_machine_id: &str) -> Result<(), PluginError> {
+    use sha2::{Digest, Sha256};
+
+    // telemetry.machineId: sha256(机器码) 前 32 hex (md5 风格)
+    let mut hasher = Sha256::new();
+    hasher.update(new_machine_id.as_bytes());
+    let digest = hasher.finalize();
+    let telemetry_id = hex::encode(&digest[..16]); // 16 字节 = 32 hex
+    let new_sqm = format!("{{{}}}", uuid::Uuid::new_v4().to_string().to_uppercase());
+    let new_dev = uuid::Uuid::new_v4().to_string();
+
+    for dir_spec in &ctx.plugin.data_dirs {
+        let resolved = ResolvedDataDir::resolve(
+            &dir_spec.path,
+            &dir_spec.label,
+            &dir_spec.include_subdirs,
+        );
+
+        // 候选查找目录: include_subdirs 指定的子目录, 否则根目录
+        let candidates: Vec<PathBuf> = if resolved.include_subdirs.is_empty() {
+            vec![resolved.expanded.clone()]
+        } else {
+            resolved
+                .include_subdirs
+                .iter()
+                .map(|s| resolved.expanded.join(s))
+                .collect()
+        };
+
+        for base in candidates {
+            let storage = base.join("storage.json");
+            if !storage.exists() {
+                continue;
+            }
+            // 读 -> 改 -> 写
+            let content = match fs::read_to_string(&storage) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let mut json: serde_json::Value = match serde_json::from_str(&content) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let touched = if let Some(obj) = json.as_object_mut() {
+                obj.insert(
+                    "telemetry.machineId".into(),
+                    serde_json::Value::String(telemetry_id.clone()),
+                );
+                obj.insert(
+                    "telemetry.sqmId".into(),
+                    serde_json::Value::String(new_sqm.clone()),
+                );
+                obj.insert(
+                    "telemetry.devDeviceId".into(),
+                    serde_json::Value::String(new_dev.clone()),
+                );
+                true
+            } else {
+                false
+            };
+            if touched {
+                if let Ok(pretty) = serde_json::to_string_pretty(&json) {
+                    let _ = fs::write(&storage, pretty);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// 删除登录痕迹

@@ -111,6 +111,8 @@ pub enum FlowStep {
     WriteMachineId,
     #[serde(rename = "reset_machine_id")]
     ResetMachineId,
+    #[serde(rename = "regenerate_machine_id")]
+    RegenerateMachineId,
     #[serde(rename = "delete_login_artifacts")]
     DeleteLoginArtifacts,
     #[serde(rename = "launch_exe")]
@@ -402,7 +404,7 @@ fn builtin_trae_cn_json() -> &'static str {
   "clear_login_flow": [
     { "type": "ensure_not_running_or_kill", "timeout": 5000 },
     { "type": "delete_login_artifacts" },
-    { "type": "reset_machine_id" }
+    { "type": "regenerate_machine_id" }
   ]
 }"#
 }

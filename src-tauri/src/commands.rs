@@ -369,6 +369,56 @@ pub fn reset_machine_id(
     Ok(())
 }
 
+/// 换新设备码: 生成全新随机 machineid 写入文件/注册表, 并同步 storage.json
+/// 的 telemetry 字段 —— 用于让目标应用认成新设备, 从而能重新触发签到/礼包。
+/// 轻量入口 (不清登录态), 签到前调用。
+#[tauri::command]
+pub fn regenerate_machine_id(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+    store: State<'_, Mutex<Store>>,
+) -> Result<String, CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?.clone();
+    drop(mgr);
+
+    // 运行中改 machineid 会被覆盖, 先拦住
+    if flow::is_app_running(&plugin) {
+        return Err(CommandError::Other(format!(
+            "{} 正在运行，请先关闭它再换设备码",
+            plugin.name
+        )));
+    }
+
+    let store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let dummy_account = Account {
+        id: "__regen__".into(),
+        name: "regen".into(),
+        email: None,
+        note: None,
+        plugin_id: plugin_id.clone(),
+        bound_machine_id: None,
+        token_enc: None,
+        created_at: chrono::Utc::now(),
+        last_used_at: None,
+        is_active: false,
+        has_snapshot: false,
+    };
+    let snapshot_dir = store.snapshots_dir().join(&plugin_id).join("__regen__");
+    let ctx = FlowContext {
+        plugin,
+        account: dummy_account,
+        snapshot_dir,
+        settings: Default::default(),
+    };
+    let new_id = flow::regenerate_machine_id(&ctx)?;
+    Ok(new_id)
+}
+
 // ===== 设置 =====
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -391,7 +441,7 @@ pub fn get_settings(store: State<'_, Mutex<Store>>) -> Result<AppSettings, Comma
 
 #[tauri::command]
 pub fn update_settings(
-    settings: AppSettings,
+    _settings: AppSettings,
     store: State<'_, Mutex<Store>>,
 ) -> Result<(), CommandError> {
     let mut store = store
