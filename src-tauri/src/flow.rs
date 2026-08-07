@@ -246,8 +246,8 @@ pub fn reset_machine_id(ctx: &FlowContext) -> Result<(), PluginError> {
             } else {
                 HKEY_LOCAL_MACHINE
             };
-            let subpath = path
-                .to_string_lossy()
+            let subpath = path.to_string_lossy();
+            let subpath = subpath
                 .trim_start_matches("HKEY_CURRENT_USER\\")
                 .trim_start_matches("HKEY_LOCAL_MACHINE\\");
             let key = mid.key.as_deref().unwrap_or("");
