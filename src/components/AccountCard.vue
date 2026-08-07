@@ -27,9 +27,7 @@
         >
           切换
         </el-button>
-        <el-button size="small" @click="$emit('save', account.id)">
-          {{ account.has_snapshot ? "更新快照" : "保存快照" }}
-        </el-button>
+
         <el-button text size="small" @click="$emit('edit', account)">编辑</el-button>
         <el-button text size="small" type="danger" @click="$emit('delete', account.id)">删除</el-button>
       </div>
@@ -45,7 +43,6 @@ import type { AccountMetadata } from "@/types";
 const props = defineProps<{ account: AccountMetadata }>();
 defineEmits<{
   switch: [id: string];
-  save: [id: string];
   edit: [account: AccountMetadata];
   delete: [id: string];
 }>();

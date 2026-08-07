@@ -166,7 +166,7 @@ fn ensure_not_running_or_kill(ctx: &FlowContext, timeout_ms: u64) -> Result<(), 
 
 /// 备份当前配置到快照目录
 fn backup_current(ctx: &FlowContext) -> Result<(), PluginError> {
-    let target_dir = ctx.snapshot_dir.join(&ctx.account.id);
+    let target_dir = &ctx.snapshot_dir;
     // 清空旧快照
     if target_dir.exists() {
         let _ = fs::remove_dir_all(&target_dir);
@@ -189,7 +189,7 @@ fn backup_current(ctx: &FlowContext) -> Result<(), PluginError> {
 
 /// 从快照恢复配置
 fn restore_snapshot(ctx: &FlowContext) -> Result<(), PluginError> {
-    let snapshot_dir = ctx.snapshot_dir.join(&ctx.account.id);
+    let snapshot_dir = &ctx.snapshot_dir;
     if !snapshot_dir.exists() {
         return Err(PluginError::FlowFailed(format!(
             "账号 {} 没有快照数据",

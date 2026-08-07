@@ -159,17 +159,23 @@ pub fn list_accounts(
 #[tauri::command]
 pub fn add_account(
     name: String,
-    email: Option<String>,
     note: Option<String>,
     plugin_id: String,
     machine_id: Option<String>,
     store: State<'_, Mutex<Store>>,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
 ) -> Result<Account, CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?.clone();
+    drop(mgr);
+
     let mut store = store
         .lock()
         .map_err(|e| CommandError::Other(e.to_string()))?;
 
-    let acc = store.add_account(name, email, note, plugin_id, machine_id)?;
+    let acc = store.add_account(name, note, plugin_id, machine_id, &plugin)?;
     Ok(acc)
 }
 
@@ -177,14 +183,13 @@ pub fn add_account(
 pub fn update_account(
     id: String,
     name: String,
-    email: Option<String>,
     note: Option<String>,
     store: State<'_, Mutex<Store>>,
 ) -> Result<(), CommandError> {
     let mut store = store
         .lock()
         .map_err(|e| CommandError::Other(e.to_string()))?;
-    store.update_account(&id, name, email, note)?;
+    store.update_account(&id, name, note)?;
     Ok(())
 }
 
@@ -353,10 +358,11 @@ pub fn reset_machine_id(
         is_active: false,
         has_snapshot: false,
     };
+    let snapshot_dir = store.snapshots_dir().join(&plugin_id).join("__reset__");
     let ctx = FlowContext {
         plugin,
         account: dummy_account,
-        snapshot_dir: store.snapshots_dir().to_path_buf(),
+        snapshot_dir,
         settings: Default::default(),
     };
     flow::reset_machine_id(&ctx)?;

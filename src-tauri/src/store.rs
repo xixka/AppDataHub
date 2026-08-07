@@ -95,10 +95,10 @@ impl Store {
     pub fn add_account(
         &mut self,
         name: String,
-        email: Option<String>,
         note: Option<String>,
         plugin_id: String,
         machine_id: Option<String>,
+        plugin: &PluginConfig,
     ) -> Result<Account, StoreError> {
         // 检查重名
         if self
@@ -110,12 +110,29 @@ impl Store {
             return Err(StoreError::DuplicateName(name));
         }
 
-        let mut acc = Account::new(name, email, note, plugin_id);
+        let mut acc = Account::new(name, None, note, plugin_id.clone());
 
         // 如果有机器码定义, 绑定当前机器码
         acc.bound_machine_id = machine_id;
 
         self.data.accounts.push(acc.clone());
+
+        // 自动保存当前快照
+        let snapshot_dir = self.snapshots_dir.join(&plugin_id).join(&acc.name);
+        let ctx = FlowContext {
+            plugin: plugin.clone(),
+            account: acc.clone(),
+            snapshot_dir,
+            settings: self.data.settings.clone(),
+        };
+        let backup_step = crate::plugin::FlowStep::BackupCurrent;
+        let _ = flow::execute_flow(&ctx, std::slice::from_ref(&backup_step));
+        acc.has_snapshot = true;
+        // 更新 pushed account 的 has_snapshot
+        if let Some(a) = self.data.accounts.last_mut() {
+            a.has_snapshot = true;
+        }
+
         self.save()?;
         Ok(acc)
     }
@@ -140,13 +157,30 @@ impl Store {
         &mut self,
         id: &str,
         name: String,
-        email: Option<String>,
         note: Option<String>,
     ) -> Result<(), StoreError> {
+        // 先取旧名字用于迁移快照
+        let old_name = self.get_account(id)?.name.clone();
+        let plugin_id = self.get_account(id)?.plugin_id.clone();
+
         let acc = self.get_account_mut(id)?;
+        let new_name = name.clone();
         acc.name = name;
-        acc.email = email;
         acc.note = note;
+
+        // 如果名字变了，迁移快照目录
+        if old_name != new_name {
+            let old_dir = self.snapshots_dir.join(&plugin_id).join(&old_name);
+            let new_dir = self.snapshots_dir.join(&plugin_id).join(&new_name);
+            if old_dir.exists() {
+                // 如果新目录已存在，先删除
+                if new_dir.exists() {
+                    let _ = fs::remove_dir_all(&new_dir);
+                }
+                fs::rename(&old_dir, &new_dir)?;
+            }
+        }
+
         self.save()?;
         Ok(())
     }
@@ -154,8 +188,9 @@ impl Store {
     pub fn delete_account(&mut self, id: &str) -> Result<(), StoreError> {
         let acc = self.get_account(id)?;
         let plugin_id = acc.plugin_id.clone();
+        let acc_name = acc.name.clone();
         // 删除快照
-        let snapshot_dir = self.snapshots_dir.join(&plugin_id).join(id);
+        let snapshot_dir = self.snapshots_dir.join(&plugin_id).join(&acc_name);
         if snapshot_dir.exists() {
             let _ = fs::remove_dir_all(&snapshot_dir);
         }
@@ -170,7 +205,7 @@ impl Store {
         plugin: &PluginConfig,
     ) -> Result<(), StoreError> {
         let acc = self.get_account(account_id)?.clone();
-        let snapshot_dir = self.snapshots_dir.join(&plugin.id).join(account_id);
+        let snapshot_dir = self.snapshots_dir.join(&plugin.id).join(&acc.name);
 
         let ctx = FlowContext {
             plugin: plugin.clone(),
@@ -194,24 +229,50 @@ impl Store {
         account_id: &str,
         plugin: &PluginConfig,
     ) -> Result<crate::flow::FlowResult, StoreError> {
-        // 取消当前活跃
+        // 1. 先备份当前活跃账号的快照
+        let current_active = self.data.accounts.iter()
+            .find(|a| a.plugin_id == plugin.id && a.is_active)
+            .cloned();
+        if let Some(cur) = &current_active {
+            if cur.id != account_id {
+                let cur_snapshot_dir = self.snapshots_dir.join(&plugin.id).join(&cur.name);
+                let cur_ctx = FlowContext {
+                    plugin: plugin.clone(),
+                    account: cur.clone(),
+                    snapshot_dir: cur_snapshot_dir,
+                    settings: self.data.settings.clone(),
+                };
+                let backup_step = crate::plugin::FlowStep::BackupCurrent;
+                let _ = flow::execute_flow(&cur_ctx, std::slice::from_ref(&backup_step));
+                // 标记当前账号有快照
+                if let Some(a) = self.data.accounts.iter_mut().find(|a| a.id == cur.id) {
+                    a.has_snapshot = true;
+                }
+            }
+        }
+
+        // 2. 取消当前活跃
         for acc in &mut self.data.accounts {
             if acc.plugin_id == plugin.id {
                 acc.is_active = false;
             }
         }
 
+        // 3. 设置目标账号为活跃
+        let snapshot_dir = self.snapshots_dir.join(&plugin.id).join(
+            self.get_account(account_id)?.name.clone()
+        );
         let acc = self.get_account_mut(account_id)?;
         acc.is_active = true;
         acc.last_used_at = Some(Utc::now());
-
         let ctx = FlowContext {
             plugin: plugin.clone(),
             account: acc.clone(),
-            snapshot_dir: self.snapshots_dir.clone(),
+            snapshot_dir,
             settings: self.data.settings.clone(),
         };
 
+        // 4. 执行切换流程 (restore_snapshot + write_machine_id)
         let result = flow::execute_flow(&ctx, &plugin.switch_flow);
 
         self.save()?;
@@ -236,10 +297,11 @@ impl Store {
             has_snapshot: false,
         };
 
+        let snapshot_dir = self.snapshots_dir.join(&plugin.id).join("__clear__");
         let ctx = FlowContext {
             plugin: plugin.clone(),
             account: dummy_account,
-            snapshot_dir: self.snapshots_dir.clone(),
+            snapshot_dir,
             settings: self.data.settings.clone(),
         };
 

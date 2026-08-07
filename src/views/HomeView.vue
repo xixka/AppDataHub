@@ -20,6 +20,12 @@
           <el-button type="primary" @click="showAdd = true">
             <el-icon><Plus /></el-icon> 添加账号
           </el-button>
+          <el-button @click="launchApp" :loading="launching">
+            <el-icon><VideoPlay /></el-icon> 启动软件
+          </el-button>
+          <el-button type="danger" @click="clearLogin">
+            <el-icon><Delete /></el-icon> 清空账号数据
+          </el-button>
         </div>
       </div>
 
@@ -54,7 +60,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from "vue";
-import { Plus } from "@element-plus/icons-vue";
+import { Plus, VideoPlay, Delete } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { usePluginStore } from "@/stores/plugin";
 import { useAccountStore } from "@/stores/account";
@@ -82,6 +88,36 @@ async function checkRunning() {
   }
 }
 
+const launching = ref(false);
+
+async function launchApp() {
+  if (!pluginStore.activePluginId) return;
+  launching.value = true;
+  try {
+    await api.launchApp(pluginStore.activePluginId);
+    ElMessage.success("已启动");
+  } catch (e) {
+    ElMessage.error("启动失败: " + e);
+  } finally {
+    launching.value = false;
+  }
+}
+
+async function clearLogin() {
+  try {
+    await ElMessageBox.confirm(
+      "清空账号数据将重置机器码并清除登录状态，确定继续？",
+      "清空确认",
+      { type: "warning" },
+    );
+    await accountStore.clearLogin(pluginStore.activePluginId);
+    ElMessage.success("已清空");
+    await loadAccounts();
+  } catch {
+    // 用户取消
+  }
+}
+
 async function onSwitch(id: string) {
   try {
     await ElMessageBox.confirm(
@@ -95,11 +131,6 @@ async function onSwitch(id: string) {
   } catch {
     // 用户取消
   }
-}
-
-async function onSave(id: string) {
-  await accountStore.saveSnapshot(id, pluginStore.activePluginId);
-  ElMessage.success("快照已保存");
 }
 
 function onEdit(acc: AccountMetadata) {

@@ -22,6 +22,8 @@ pub enum PluginError {
     NoExePath(String),
     #[error("流程执行失败: {0}")]
     FlowFailed(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 /// 插件配置 (对应 JSON 文件)
@@ -141,10 +143,6 @@ impl PluginManager {
 
     pub fn init_builtin(&mut self) -> Result<(), PluginError> {
         std::fs::create_dir_all(&self.plugins_dir)?;
-        let trae_path = self.plugins_dir.join("trae-cn.json");
-        if !trae_path.exists() {
-            std::fs::write(&trae_path, builtin_trae_cn_json())?;
-        }
         self.load_overrides()?;
         self.load_disabled()?;
         Ok(())
@@ -236,7 +234,7 @@ impl PluginManager {
             if let Ok(cfg) = self.load_plugin(id) {
                 let exe_path = self.get_exe_path(&cfg);
                 result.push(PluginInfo {
-                    id: cfg.id,
+                    id: cfg.id.clone(),
                     name: cfg.name,
                     version: cfg.version,
                     icon: cfg.icon,
@@ -262,7 +260,7 @@ impl PluginManager {
                 if let Ok(cfg) = self.load_plugin(stem) {
                     let exe_path = self.get_exe_path(&cfg);
                     result.push(PluginInfo {
-                        id: cfg.id,
+                        id: cfg.id.clone(),
                         name: cfg.name,
                         version: cfg.version,
                         icon: cfg.icon,
@@ -298,22 +296,23 @@ impl PluginManager {
     }
 
     fn load_plugin(&self, id: &str) -> Result<PluginConfig, PluginError> {
-        // 先从文件加载
+        // 内置插件优先，不从磁盘加载
+        match id {
+            "trae-cn" => {
+                let cfg: PluginConfig =
+                    serde_json::from_str(builtin_trae_cn_json()).map_err(PluginError::Serde)?;
+                return Ok(cfg);
+            }
+            _ => {}
+        }
+        // 用户自定义插件从文件加载
         let path = self.plugins_dir.join(format!("{}.json", id));
         if path.exists() {
             let content = std::fs::read_to_string(&path)?;
             let cfg: PluginConfig = serde_json::from_str(&content)?;
             return Ok(cfg);
         }
-        // 内置
-        match id {
-            "trae-cn" => {
-                let cfg: PluginConfig =
-                    serde_json::from_str(builtin_trae_cn_json()).map_err(PluginError::Serde)?;
-                Ok(cfg)
-            }
-            _ => Err(PluginError::NotFound(id.to_string())),
-        }
+        Err(PluginError::NotFound(id.to_string()))
     }
 }
 
@@ -358,42 +357,40 @@ fn builtin_trae_cn_json() -> &'static str {
   "version": "0.1.0",
   "icon": "🤖",
   "homepage": "https://www.trae.cn",
-  "process_names": ["Trae.exe", "Trae"],
+  "process_names": ["TRAE SOLO CN.exe", "TRAE SOLO CN"],
   "exe_candidates": [
-    "%LOCALAPPDATA%/Programs/Trae/Trae.exe",
-    "%LOCALAPPDATA%/Trae/Trae.exe"
+    "C:/soft/TRAE SOLO CN/TRAE SOLO CN.exe"
   ],
   "data_dirs": [
     {
-      "path": "%APPDATA%/Trae",
+      "path": "%APPDATA%/TRAE SOLO CN/User",
       "label": "用户配置目录",
-      "include_subdirs": ["User"]
+      "include_subdirs": ["globalStorage"]
     },
     {
-      "path": "%USERPROFILE%/.trae",
+      "path": "%USERPROFILE%/.trae-cn",
       "label": "用户扩展目录",
       "include_subdirs": []
     }
   ],
-  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs"],
+  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "History", "workspaceStorage", ".ckg", ".mcp_gallery_cache", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB"],
   "machine_id": {
     "type": "file",
-    "path": "%APPDATA%/Trae/Service Provider/trae__internal_services.machineid",
+    "path": "%APPDATA%/TRAE SOLO CN/machineid",
     "label": "Trae 机器码"
   },
   "login_artifacts": [
     {
       "type": "dir",
-      "path": "%APPDATA%/Trae/Service Provider/trae__internal_services_auth_cache"
+      "path": "%APPDATA%/TRAE SOLO CN/Local Storage"
     },
     {
-      "type": "dir",
-      "path": "%APPDATA%/Trae/Service Provider/trae__internal_services_oidc"
+      "type": "file",
+      "path": "%APPDATA%/TRAE SOLO CN/Network/Cookies"
     }
   ],
   "switch_flow": [
     { "type": "ensure_not_running_or_kill", "timeout": 5000 },
-    { "type": "backup_current" },
     { "type": "restore_snapshot" },
     { "type": "write_machine_id" }
   ],

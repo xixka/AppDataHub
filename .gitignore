@@ -30,3 +30,5 @@ Thumbs.db
 
 # pnpm
 .pnpm-store/
+pnpm-lock.yaml
+pnpm-workspace.yaml

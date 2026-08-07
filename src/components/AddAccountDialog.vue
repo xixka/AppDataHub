@@ -9,9 +9,7 @@
       <el-form-item label="名称" prop="name">
         <el-input v-model="form.name" placeholder="如：工作账号" />
       </el-form-item>
-      <el-form-item label="邮箱">
-        <el-input v-model="form.email" placeholder="可选" />
-      </el-form-item>
+
       <el-form-item label="备注">
         <el-input v-model="form.note" type="textarea" :rows="2" placeholder="可选" />
       </el-form-item>
@@ -49,7 +47,6 @@ const dialogVisible = computed({
 
 const form = reactive({
   name: "",
-  email: "",
   note: "",
 });
 
@@ -67,14 +64,12 @@ async function onSave() {
         await accountStore.update({
           id: props.editing.id,
           name: form.name,
-          email: form.email || null,
           note: form.note || null,
           pluginId: props.pluginId,
         });
       } else {
         await accountStore.add({
           name: form.name,
-          email: form.email || null,
           note: form.note || null,
           pluginId: props.pluginId,
           machineId: null,
@@ -92,7 +87,6 @@ async function onSave() {
 
 function onClose() {
   form.name = "";
-  form.email = "";
   form.note = "";
 }
 
@@ -101,11 +95,9 @@ watch(
   (v) => {
     if (v && props.editing) {
       form.name = props.editing.name;
-      form.email = props.editing.email ?? "";
       form.note = props.editing.note ?? "";
     } else if (v) {
       form.name = "";
-      form.email = "";
       form.note = "";
     }
   },

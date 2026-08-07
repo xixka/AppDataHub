@@ -13,6 +13,7 @@ AI 软件多账号切换管理器，基于 Vue 3 + Tauri 2 + Rust 构建。
 ## 开发
 
 ```bash
+winget install Rustlang.Rustup
 pnpm install
 pnpm tauri dev      # 开发
 pnpm tauri build    # 生产构建

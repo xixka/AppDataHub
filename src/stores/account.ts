@@ -26,7 +26,6 @@ export const useAccountStore = defineStore("accounts", () => {
 
   async function add(params: {
     name: string;
-    email: string | null;
     note: string | null;
     pluginId: string;
     machineId: string | null;
@@ -38,14 +37,12 @@ export const useAccountStore = defineStore("accounts", () => {
   async function update(params: {
     id: string;
     name: string;
-    email: string | null;
     note: string | null;
     pluginId: string;
   }) {
     await api.updateAccount({
       id: params.id,
       name: params.name,
-      email: params.email,
       note: params.note,
     });
     await load(params.pluginId);
@@ -53,11 +50,6 @@ export const useAccountStore = defineStore("accounts", () => {
 
   async function remove(id: string, pluginId: string) {
     await api.deleteAccount(id);
-    await load(pluginId);
-  }
-
-  async function saveSnapshot(accountId: string, pluginId: string) {
-    await api.saveSnapshot(accountId);
     await load(pluginId);
   }
 
@@ -85,7 +77,6 @@ export const useAccountStore = defineStore("accounts", () => {
     add,
     update,
     remove,
-    saveSnapshot,
     switchTo,
     clearLogin,
   };

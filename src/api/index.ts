@@ -33,7 +33,6 @@ export const listAccounts = (pluginId: string) =>
   invoke<AccountMetadata[]>("list_accounts", { pluginId });
 export const addAccount = (params: {
   name: string;
-  email: string | null;
   note: string | null;
   pluginId: string;
   machineId: string | null;
@@ -41,7 +40,6 @@ export const addAccount = (params: {
 export const updateAccount = (params: {
   id: string;
   name: string;
-  email: string | null;
   note: string | null;
 }) => invoke<void>("update_account", params);
 export const deleteAccount = (id: string) => invoke<void>("delete_account", { id });

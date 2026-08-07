@@ -36,16 +36,16 @@
             <div class="card-right">
               <el-switch
                 :model-value="p.enabled"
-                @change="(val: boolean) => onToggle(p.id, val)"
+                @update:model-value="(val: boolean) => onToggle(p.id, val)"
                 active-text="启用"
                 inactive-text="禁用"
                 inline-prompt
               />
               <el-button
+                v-if="!p.is_builtin"
                 text
                 size="small"
                 type="danger"
-                :disabled="p.is_builtin"
                 @click="onDelete(p)"
               >
                 删除
@@ -57,7 +57,7 @@
     </div>
 
     <!-- 添加插件弹窗 -->
-    <el-dialog v-model="showAdd" title="添加自定义插件" width="640px" top="5vh">
+    <el-dialog v-model="showAdd" title="添加自定义插件" width="90%" top="3vh" style="max-width: 1200px;">
       <el-form :model="form" label-width="140px" size="small">
         <el-form-item label="插件 ID">
           <el-input v-model="form.id" placeholder="如: my-app (英文, 用于文件名)" />
