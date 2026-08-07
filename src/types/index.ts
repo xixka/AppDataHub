@@ -49,6 +49,13 @@ export type FlowStep =
   | { type: "launch_exe" }
   | { type: "sleep"; ms: number };
 
+/** 流程执行结果 */
+export interface FlowResult {
+  steps_executed: string[];
+  success: boolean;
+  error: string | null;
+}
+
 /** 账号 */
 export interface Account {
   id: string;
@@ -96,11 +103,7 @@ export interface ProfileInfo {
 }
 
 /** 设置 */
-export interface AppSettings {
-  auto_kill: boolean;
-  auto_launch_after_switch: boolean;
-  theme: "light" | "dark";
-}
+export interface AppSettings {}
 
 /** 机器码信息 */
 export interface MachineIdInfo {

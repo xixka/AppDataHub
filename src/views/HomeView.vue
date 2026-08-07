@@ -24,7 +24,7 @@
             <el-icon><VideoPlay /></el-icon> 启动软件
           </el-button>
           <el-button type="danger" @click="clearLogin">
-            <el-icon><Delete /></el-icon> 清空账号数据
+            <el-icon><Delete /></el-icon> 清空数据
           </el-button>
         </div>
       </div>
@@ -113,8 +113,10 @@ async function clearLogin() {
     await accountStore.clearLogin(pluginStore.activePluginId);
     ElMessage.success("已清空");
     await loadAccounts();
-  } catch {
-    // 用户取消
+  } catch (e) {
+    if (e !== "cancel" && e !== undefined) {
+      ElMessage.error("清空失败: " + e);
+    }
   }
 }
 
@@ -128,8 +130,10 @@ async function onSwitch(id: string) {
     await accountStore.switchTo(id, pluginStore.activePluginId);
     ElMessage.success("切换成功");
     await checkRunning();
-  } catch {
-    // 用户取消
+  } catch (e) {
+    if (e !== "cancel" && e !== undefined) {
+      ElMessage.error("切换失败: " + e);
+    }
   }
 }
 

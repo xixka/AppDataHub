@@ -373,18 +373,11 @@ pub fn reset_machine_id(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
-    pub auto_kill: bool,
-    pub auto_launch_after_switch: bool,
-    pub theme: String,
 }
 
 impl From<&FlowSettings> for AppSettings {
-    fn from(s: &FlowSettings) -> Self {
-        Self {
-            auto_kill: s.auto_kill,
-            auto_launch_after_switch: s.auto_launch_after_switch,
-            theme: "light".into(),
-        }
+    fn from(_s: &FlowSettings) -> Self {
+        Self {}
     }
 }
 
@@ -404,10 +397,7 @@ pub fn update_settings(
     let mut store = store
         .lock()
         .map_err(|e| CommandError::Other(e.to_string()))?;
-    let flow_settings = FlowSettings {
-        auto_kill: settings.auto_kill,
-        auto_launch_after_switch: settings.auto_launch_after_switch,
-    };
+    let flow_settings = FlowSettings {};
     store.update_settings(flow_settings)?;
     Ok(())
 }

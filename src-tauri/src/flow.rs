@@ -22,10 +22,7 @@ pub struct FlowContext {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FlowSettings {
-    pub auto_kill: bool,
-    pub auto_launch_after_switch: bool,
-}
+pub struct FlowSettings {}
 
 /// 执行结果
 #[derive(Debug, Clone, Serialize)]
@@ -127,13 +124,8 @@ fn ensure_not_running_or_kill(ctx: &FlowContext, timeout_ms: u64) -> Result<(), 
                 return Ok(());
             }
 
-            if !ctx.settings.auto_kill {
-                return Err(PluginError::FlowFailed(
-                    "应用正在运行，请先关闭或启用自动结束".into(),
-                ));
-            }
-
-            // 尝试 kill
+            // 直接 kill
+            
             for p in sys.processes().values() {
                 let name = p.name().to_string_lossy().to_lowercase();
                 if ctx

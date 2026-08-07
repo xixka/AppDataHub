@@ -380,14 +380,19 @@ fn builtin_trae_cn_json() -> &'static str {
     "label": "Trae 机器码"
   },
   "login_artifacts": [
-    {
-      "type": "dir",
-      "path": "%APPDATA%/TRAE SOLO CN/Local Storage"
-    },
-    {
-      "type": "file",
-      "path": "%APPDATA%/TRAE SOLO CN/Network/Cookies"
-    }
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/machineid" },
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/User/globalStorage/storage.json" },
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/User/globalStorage/state.vscdb" },
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/User/globalStorage/state.vscdb.backup" },
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/Local State" },
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/Preferences" },
+    { "type": "dir", "path": "%APPDATA%/TRAE SOLO CN/Local Storage" },
+    { "type": "dir", "path": "%APPDATA%/TRAE SOLO CN/Session Storage" },
+    { "type": "dir", "path": "%APPDATA%/TRAE SOLO CN/IndexedDB" },
+    { "type": "file", "path": "%APPDATA%/TRAE SOLO CN/Network/Cookies" },
+    { "type": "dir", "path": "%APPDATA%/TRAE SOLO CN/Partitions/trae-webview/Local Storage" },
+    { "type": "dir", "path": "%APPDATA%/TRAE SOLO CN/Partitions/trae-webview/Session Storage" },
+    { "type": "dir", "path": "%APPDATA%/TRAE SOLO CN/Partitions/trae-webview/IndexedDB" }
   ],
   "switch_flow": [
     { "type": "ensure_not_running_or_kill", "timeout": 5000 },

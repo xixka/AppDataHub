@@ -10,6 +10,7 @@ import type {
   ProfileInfo,
   AppSettings,
   MachineIdInfo,
+  FlowResult,
 } from "@/types";
 
 // ===== 插件 =====
@@ -48,9 +49,9 @@ export const deleteAccount = (id: string) => invoke<void>("delete_account", { id
 export const saveSnapshot = (accountId: string) =>
   invoke<void>("save_snapshot", { accountId });
 export const switchAccount = (accountId: string) =>
-  invoke<void>("switch_account", { accountId });
+  invoke<FlowResult>("switch_account", { accountId });
 export const clearLoginState = (pluginId: string) =>
-  invoke<void>("clear_login_state", { pluginId });
+  invoke<FlowResult>("clear_login_state", { pluginId });
 
 // ===== 应用管理 =====
 export const checkAppRunning = (pluginId: string) =>

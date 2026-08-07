@@ -56,7 +56,10 @@ export const useAccountStore = defineStore("accounts", () => {
   async function switchTo(accountId: string, pluginId: string) {
     switching.value = true;
     try {
-      await api.switchAccount(accountId);
+      const result = await api.switchAccount(accountId);
+      if (!result.success && result.error) {
+        throw new Error(result.error);
+      }
       await load(pluginId);
     } finally {
       switching.value = false;
@@ -64,7 +67,10 @@ export const useAccountStore = defineStore("accounts", () => {
   }
 
   async function clearLogin(pluginId: string) {
-    await api.clearLoginState(pluginId);
+    const result = await api.clearLoginState(pluginId);
+    if (!result.success && result.error) {
+      throw new Error(result.error);
+    }
     await load(pluginId);
   }
 

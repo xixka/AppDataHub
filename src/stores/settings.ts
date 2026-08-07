@@ -7,11 +7,7 @@ import * as api from "@/api";
 import type { AppSettings } from "@/types";
 
 export const useSettingsStore = defineStore("settings", () => {
-  const settings = ref<AppSettings>({
-    auto_kill: false,
-    auto_launch_after_switch: false,
-    theme: "light",
-  });
+  const settings = ref<AppSettings>({});
   const loaded = ref(false);
 
   async function load() {
