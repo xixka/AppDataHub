@@ -46,15 +46,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Install pnpm
-        run: npm install -g pnpm
+          cache: npm
 
       - name: Install dependencies
-        run: pnpm install --config.ignored-built-dependencies-warning=false
+        run: npm install
 
       - name: Build frontend
-        run: pnpm build
+        run: npm run build
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
