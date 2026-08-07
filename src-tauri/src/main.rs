@@ -74,8 +74,6 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             commands::reload_plugins,
             commands::enable_plugin,
             commands::disable_plugin,
-            commands::add_plugin,
-            commands::delete_plugin,
             commands::set_plugin_paths,
             commands::get_plugin_config,
             // 账号
@@ -92,7 +90,6 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             // 机器码
             commands::get_machine_id,
             commands::reset_machine_id,
-            commands::regenerate_machine_id,
             // 设置
             commands::get_settings,
             commands::update_settings,

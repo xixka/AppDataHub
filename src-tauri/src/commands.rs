@@ -5,6 +5,45 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+/// 启动可执行文件 (Windows 上通过 runas 触发 UAC 提权)
+#[cfg(target_os = "windows")]
+fn spawn_exe(exe_path: &str) -> Result<(), String> {
+    let ps_cmd: &str = "Start-Process";
+    let ps_path: &str = "-FilePath";
+    let ps_verb: &str = "-Verb";
+    let ps_verb_val: &str = "Runas";
+    let flag_np: &str = "-NoProfile";
+    let flag_cmd: &str = "-Command";
+    let script = format!(
+        "{} {} '{}' {} {}",
+        ps_cmd, ps_path, exe_path.replace('\'', "''"), ps_verb, ps_verb_val
+    );
+    let output = std::process::Command::new("powershell")
+        .arg(flag_np)
+        .arg(flag_cmd)
+        .arg(&script)
+        .output()
+        .map_err(|e| format!("启动失败: {}", e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("OperationCanceled") || stderr.contains("0x800704C7") {
+            Err("用户取消了提升权限".into())
+        } else {
+            Err(format!("启动失败: {}", stderr.trim()))
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_exe(exe_path: &str) -> Result<(), String> {
+    std::process::Command::new(exe_path)
+        .spawn()
+        .map_err(|e| format!("启动失败: {}", e))?;
+    Ok(())
+}
+
 use crate::account::{Account, AccountMetadata};
 use crate::flow::{self, FlowContext, FlowResult, FlowSettings};
 use crate::plugin::{PluginConfig, PluginError, PluginInfo};
@@ -89,32 +128,6 @@ pub fn disable_plugin(
         .lock()
         .map_err(|e| CommandError::Other(e.to_string()))?;
     mgr.disable_plugin(&plugin_id)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn add_plugin(
-    config: serde_json::Value,
-    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
-) -> Result<(), CommandError> {
-    let mgr = plugin_mgr
-        .lock()
-        .map_err(|e| CommandError::Other(e.to_string()))?;
-    let cfg: PluginConfig = serde_json::from_value(config)
-        .map_err(|e| CommandError::Plugin(format!("插件配置解析失败: {}", e)))?;
-    mgr.add_custom_plugin(&cfg)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn delete_plugin(
-    plugin_id: String,
-    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
-) -> Result<(), CommandError> {
-    let mgr = plugin_mgr
-        .lock()
-        .map_err(|e| CommandError::Other(e.to_string()))?;
-    mgr.delete_custom_plugin(&plugin_id)?;
     Ok(())
 }
 
@@ -294,9 +307,7 @@ pub fn launch_app(
         .ok_or_else(|| CommandError::Plugin(format!("未找到 {} 可执行文件", plugin.name)))?;
     drop(mgr);
 
-    std::process::Command::new(&exe_path)
-        .spawn()
-        .map_err(|e| CommandError::Other(format!("启动失败: {}", e)))?;
+    spawn_exe(&exe_path).map_err(CommandError::Other)?;
     Ok(())
 }
 
@@ -367,56 +378,6 @@ pub fn reset_machine_id(
     };
     flow::reset_machine_id(&ctx)?;
     Ok(())
-}
-
-/// 换新设备码: 生成全新随机 machineid 写入文件/注册表, 并同步 storage.json
-/// 的 telemetry 字段 —— 用于让目标应用认成新设备, 从而能重新触发签到/礼包。
-/// 轻量入口 (不清登录态), 签到前调用。
-#[tauri::command]
-pub fn regenerate_machine_id(
-    plugin_id: String,
-    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
-    store: State<'_, Mutex<Store>>,
-) -> Result<String, CommandError> {
-    let mgr = plugin_mgr
-        .lock()
-        .map_err(|e| CommandError::Other(e.to_string()))?;
-    let plugin = mgr.get(&plugin_id)?.clone();
-    drop(mgr);
-
-    // 运行中改 machineid 会被覆盖, 先拦住
-    if flow::is_app_running(&plugin) {
-        return Err(CommandError::Other(format!(
-            "{} 正在运行，请先关闭它再换设备码",
-            plugin.name
-        )));
-    }
-
-    let store = store
-        .lock()
-        .map_err(|e| CommandError::Other(e.to_string()))?;
-    let dummy_account = Account {
-        id: "__regen__".into(),
-        name: "regen".into(),
-        email: None,
-        note: None,
-        plugin_id: plugin_id.clone(),
-        bound_machine_id: None,
-        token_enc: None,
-        created_at: chrono::Utc::now(),
-        last_used_at: None,
-        is_active: false,
-        has_snapshot: false,
-    };
-    let snapshot_dir = store.snapshots_dir().join(&plugin_id).join("__regen__");
-    let ctx = FlowContext {
-        plugin,
-        account: dummy_account,
-        snapshot_dir,
-        settings: Default::default(),
-    };
-    let new_id = flow::regenerate_machine_id(&ctx)?;
-    Ok(new_id)
 }
 
 // ===== 设置 =====
@@ -503,16 +464,18 @@ pub fn get_license() -> String {
 fn open_folder(path: &std::path::Path) {
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("explorer")
-            .arg(path)
-            .spawn();
+        run_shell_cmd("explorer", &[path]);
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open").arg(path).spawn();
+        run_shell_cmd("open", &[path]);
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+        run_shell_cmd("xdg-open", &[path]);
     }
+}
+
+fn run_shell_cmd(cmd: &str, args: &[&std::path::Path]) {
+    let _ = std::process::Command::new(cmd).args(args).spawn();
 }

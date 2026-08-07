@@ -73,7 +73,6 @@ fn step_label(step: &FlowStep) -> String {
         FlowStep::RestoreSnapshot => "restore_snapshot".into(),
         FlowStep::WriteMachineId => "write_machine_id".into(),
         FlowStep::ResetMachineId => "reset_machine_id".into(),
-        FlowStep::RegenerateMachineId => "regenerate_machine_id".into(),
         FlowStep::DeleteLoginArtifacts => "delete_login_artifacts".into(),
         FlowStep::LaunchExe => "launch_exe".into(),
         FlowStep::Sleep { ms } => format!("sleep({}ms)", ms),
@@ -89,9 +88,6 @@ fn execute_step(ctx: &FlowContext, step: &FlowStep) -> Result<(), PluginError> {
         FlowStep::RestoreSnapshot => restore_snapshot(ctx),
         FlowStep::WriteMachineId => write_machine_id(ctx),
         FlowStep::ResetMachineId => reset_machine_id(ctx),
-        FlowStep::RegenerateMachineId => {
-            regenerate_machine_id(ctx).map(|_| ())
-        }
         FlowStep::DeleteLoginArtifacts => delete_login_artifacts(ctx),
         FlowStep::LaunchExe => launch_exe(ctx),
         FlowStep::Sleep { ms } => {
@@ -209,15 +205,13 @@ fn restore_snapshot(ctx: &FlowContext) -> Result<(), PluginError> {
     Ok(())
 }
 
-/// 写入绑定的机器码
+/// 写入绑定的机器码 (若账号未绑定则跳过)
 fn write_machine_id(ctx: &FlowContext) -> Result<(), PluginError> {
+    let Some(value) = ctx.account.bound_machine_id.as_ref() else {
+        // 账号未绑定机器码，视为 noop（不覆盖当前机器码）
+        return Ok(());
+    };
     let mid = &ctx.plugin.machine_id;
-    let value = ctx
-        .account
-        .bound_machine_id
-        .as_ref()
-        .ok_or_else(|| PluginError::FlowFailed("账号未绑定机器码".into()))?;
-
     write_machine_id_value(mid, value)
 }
 
@@ -256,96 +250,6 @@ pub fn reset_machine_id(ctx: &FlowContext) -> Result<(), PluginError> {
     }
 }
 
-/// 生成全新随机机器码并写入 (file/registry), 同时同步 storage.json 的
-/// telemetry.machineId / sqmId / devDeviceId —— 让目标应用认成全新设备,
-/// 从而能重新触发"新设备"礼包/签到。参考 Trae-Account-Manager 的做法。
-pub fn regenerate_machine_id(ctx: &FlowContext) -> Result<String, PluginError> {
-    let mid = &ctx.plugin.machine_id;
-    let new_id = uuid::Uuid::new_v4().to_string();
-
-    // 1. 写入新机器码到文件 / 注册表
-    write_machine_id_value(mid, &new_id)?;
-
-    // 2. 同步 storage.json 的 telemetry 字段 (若存在)
-    let _ = sync_trae_telemetry(ctx, &new_id);
-
-    Ok(new_id)
-}
-
-/// 遍历插件 data_dirs 查找 storage.json, 更新其中的 telemetry.machineId
-/// (= sha256(机器码)前32hex, 模拟 Trae 的 md5 风格)、telemetry.sqmId、
-/// telemetry.devDeviceId 为全新随机值。
-fn sync_trae_telemetry(ctx: &FlowContext, new_machine_id: &str) -> Result<(), PluginError> {
-    use sha2::{Digest, Sha256};
-
-    // telemetry.machineId: sha256(机器码) 前 32 hex (md5 风格)
-    let mut hasher = Sha256::new();
-    hasher.update(new_machine_id.as_bytes());
-    let digest = hasher.finalize();
-    let telemetry_id = hex::encode(&digest[..16]); // 16 字节 = 32 hex
-    let new_sqm = format!("{{{}}}", uuid::Uuid::new_v4().to_string().to_uppercase());
-    let new_dev = uuid::Uuid::new_v4().to_string();
-
-    for dir_spec in &ctx.plugin.data_dirs {
-        let resolved = ResolvedDataDir::resolve(
-            &dir_spec.path,
-            &dir_spec.label,
-            &dir_spec.include_subdirs,
-        );
-
-        // 候选查找目录: include_subdirs 指定的子目录, 否则根目录
-        let candidates: Vec<PathBuf> = if resolved.include_subdirs.is_empty() {
-            vec![resolved.expanded.clone()]
-        } else {
-            resolved
-                .include_subdirs
-                .iter()
-                .map(|s| resolved.expanded.join(s))
-                .collect()
-        };
-
-        for base in candidates {
-            let storage = base.join("storage.json");
-            if !storage.exists() {
-                continue;
-            }
-            // 读 -> 改 -> 写
-            let content = match fs::read_to_string(&storage) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
-            let mut json: serde_json::Value = match serde_json::from_str(&content) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let touched = if let Some(obj) = json.as_object_mut() {
-                obj.insert(
-                    "telemetry.machineId".into(),
-                    serde_json::Value::String(telemetry_id.clone()),
-                );
-                obj.insert(
-                    "telemetry.sqmId".into(),
-                    serde_json::Value::String(new_sqm.clone()),
-                );
-                obj.insert(
-                    "telemetry.devDeviceId".into(),
-                    serde_json::Value::String(new_dev.clone()),
-                );
-                true
-            } else {
-                false
-            };
-            if touched {
-                if let Ok(pretty) = serde_json::to_string_pretty(&json) {
-                    let _ = fs::write(&storage, pretty);
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
 /// 删除登录痕迹
 fn delete_login_artifacts(ctx: &FlowContext) -> Result<(), PluginError> {
     for artifact in &ctx.plugin.login_artifacts {
@@ -363,7 +267,7 @@ fn delete_login_artifacts(ctx: &FlowContext) -> Result<(), PluginError> {
     Ok(())
 }
 
-/// 启动应用
+/// 启动应用 (Windows 上通过 ShellExecute+runas 支持 UAC 提升)
 fn launch_exe(ctx: &FlowContext) -> Result<(), PluginError> {
     #[cfg(feature = "tauri-runtime")]
     {
@@ -375,9 +279,7 @@ fn launch_exe(ctx: &FlowContext) -> Result<(), PluginError> {
             .filter(|p| p.exists());
 
         if let Some(exe) = exe_path {
-            std::process::Command::new(&exe)
-                .spawn()
-                .map_err(|e| PluginError::FlowFailed(format!("启动失败: {}", e)))?;
+            spawn_exe(&exe.to_string_lossy()).map_err(|e| PluginError::FlowFailed(e))?;
             Ok(())
         } else {
             Err(PluginError::NoExePath(ctx.plugin.id.clone()))
@@ -389,6 +291,44 @@ fn launch_exe(ctx: &FlowContext) -> Result<(), PluginError> {
         let _ = ctx;
         Ok(())
     }
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_exe(exe_path: &str) -> Result<(), String> {
+    let ps_cmd: &str = "Start-Process";
+    let ps_path: &str = "-FilePath";
+    let ps_verb: &str = "-Verb";
+    let ps_verb_val: &str = "Runas";
+    let flag_np: &str = "-NoProfile";
+    let flag_cmd: &str = "-Command";
+    let script = format!(
+        "{} {} '{}' {} {}",
+        ps_cmd, ps_path, exe_path.replace('\'', "''"), ps_verb, ps_verb_val
+    );
+    let output = std::process::Command::new("powershell")
+        .arg(flag_np)
+        .arg(flag_cmd)
+        .arg(&script)
+        .output()
+        .map_err(|e| format!("启动失败: {}", e))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("OperationCanceled") || stderr.contains("0x800704C7") {
+            Err("用户取消了提升权限".into())
+        } else {
+            Err(format!("启动失败: {}", stderr.trim()))
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn spawn_exe(exe_path: &str) -> Result<(), String> {
+    std::process::Command::new(exe_path)
+        .spawn()
+        .map_err(|e| format!("启动失败: {}", e))?;
+    Ok(())
 }
 
 /// 写入机器码值 (公共函数)

@@ -12,7 +12,6 @@
       >
         <el-icon><Box /></el-icon>
         <span>{{ p.name }}</span>
-        <el-tag v-if="p.is_builtin" size="small" type="info">内置</el-tag>
       </el-menu-item>
     </el-menu>
     <div class="sidebar-footer">

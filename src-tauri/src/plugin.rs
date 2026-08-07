@@ -1,7 +1,6 @@
 //! 插件配置 Schema — 对应 JSON 插件文件
 //!
-//! 插件文件位置: {app_data_dir}/plugins/{plugin_id}.json
-//! 内置插件: 编译时 include_str! 嵌入
+//! 所有插件均为内置编译时嵌入，不支持手动添加/删除。
 
 use std::path::PathBuf;
 
@@ -111,8 +110,6 @@ pub enum FlowStep {
     WriteMachineId,
     #[serde(rename = "reset_machine_id")]
     ResetMachineId,
-    #[serde(rename = "regenerate_machine_id")]
-    RegenerateMachineId,
     #[serde(rename = "delete_login_artifacts")]
     DeleteLoginArtifacts,
     #[serde(rename = "launch_exe")]
@@ -127,7 +124,7 @@ fn default_timeout() -> u64 {
     5000
 }
 
-/// 插件管理器 — 加载、查询插件
+/// 插件管理器 — 加载、查询内置插件
 pub struct PluginManager {
     plugins_dir: PathBuf,
     exe_overrides: std::collections::HashMap<String, String>,
@@ -202,36 +199,14 @@ impl PluginManager {
         Ok(())
     }
 
-    pub fn add_custom_plugin(&self, config: &PluginConfig) -> Result<(), PluginError> {
-        let path = self.plugins_dir.join(format!("{}.json", config.id));
-        if path.exists() {
-            return Err(PluginError::Other(format!("插件 {} 已存在", config.id)));
-        }
-        std::fs::write(path, serde_json::to_string_pretty(config)?)?;
-        Ok(())
-    }
-
-    pub fn delete_custom_plugin(&self, plugin_id: &str) -> Result<(), PluginError> {
-        let builtin = vec!["trae-cn"];
-        if builtin.contains(&plugin_id) {
-            return Err(PluginError::Other("不能删除内置插件".into()));
-        }
-        let path = self.plugins_dir.join(format!("{}.json", plugin_id));
-        if path.exists() {
-            std::fs::remove_file(path)?;
-        }
-        Ok(())
-    }
-
     pub fn is_disabled(&self, plugin_id: &str) -> bool {
         self.disabled_plugins.contains(&plugin_id.to_string())
     }
 
     pub fn list(&self) -> Vec<PluginInfo> {
+        let builtin_ids = vec!["trae-cn", "wukong", "autoclaw", "loomy"];
         let mut result = Vec::new();
 
-        // 内置插件
-        let builtin_ids = vec!["trae-cn"];
         for id in &builtin_ids {
             if let Ok(cfg) = self.load_plugin(id) {
                 let exe_path = self.get_exe_path(&cfg);
@@ -245,33 +220,6 @@ impl PluginManager {
                     has_paths: exe_path.is_some(),
                     exe_path,
                 });
-            }
-        }
-
-        // 用户插件 (plugins_dir 下的其他 json)
-        if let Ok(entries) = std::fs::read_dir(&self.plugins_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                    continue;
-                }
-                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-                if stem == "exe-overrides" || builtin_ids.contains(&stem) {
-                    continue;
-                }
-                if let Ok(cfg) = self.load_plugin(stem) {
-                    let exe_path = self.get_exe_path(&cfg);
-                    result.push(PluginInfo {
-                        id: cfg.id.clone(),
-                        name: cfg.name,
-                        version: cfg.version,
-                        icon: cfg.icon,
-                        is_builtin: false,
-                    enabled: !self.is_disabled(&cfg.id),
-                        has_paths: exe_path.is_some(),
-                        exe_path,
-                    });
-                }
             }
         }
 
@@ -298,23 +246,16 @@ impl PluginManager {
     }
 
     fn load_plugin(&self, id: &str) -> Result<PluginConfig, PluginError> {
-        // 内置插件优先，不从磁盘加载
-        match id {
-            "trae-cn" => {
-                let cfg: PluginConfig =
-                    serde_json::from_str(builtin_trae_cn_json()).map_err(PluginError::Serde)?;
-                return Ok(cfg);
-            }
-            _ => {}
-        }
-        // 用户自定义插件从文件加载
-        let path = self.plugins_dir.join(format!("{}.json", id));
-        if path.exists() {
-            let content = std::fs::read_to_string(&path)?;
-            let cfg: PluginConfig = serde_json::from_str(&content)?;
-            return Ok(cfg);
-        }
-        Err(PluginError::NotFound(id.to_string()))
+        // 所有插件均为内置
+        let json = match id {
+            "trae-cn" => builtin_trae_cn_json(),
+            "wukong" => builtin_wukong_json(),
+            "autoclaw" => builtin_autoclaw_json(),
+            "loomy" => builtin_loomy_json(),
+            _ => return Err(PluginError::NotFound(id.to_string())),
+        };
+        let cfg: PluginConfig = serde_json::from_str(json).map_err(PluginError::Serde)?;
+        Ok(cfg)
     }
 }
 
@@ -351,7 +292,9 @@ pub fn expand_env(path: &str) -> PathBuf {
     PathBuf::from(result)
 }
 
-/// 内置 Trae CN 插件 JSON
+// ===== 内置插件 JSON =====
+
+/// Trae CN — AI IDE (字节跳动)
 fn builtin_trae_cn_json() -> &'static str {
     r#"{
   "id": "trae-cn",
@@ -403,8 +346,167 @@ fn builtin_trae_cn_json() -> &'static str {
   ],
   "clear_login_flow": [
     { "type": "ensure_not_running_or_kill", "timeout": 5000 },
-    { "type": "delete_login_artifacts" },
-    { "type": "regenerate_machine_id" }
+    { "type": "delete_login_artifacts" }
+  ]
+}"#
+}
+
+/// Wukong (悟空) — 钉钉 AI 办公助手
+fn builtin_wukong_json() -> &'static str {
+    r#"{
+  "id": "wukong",
+  "name": "悟空",
+  "version": "0.1.0",
+  "icon": "🐒",
+  "homepage": "https://www.dingtalk.com",
+  "process_names": ["DingTalkReal.exe", "DingTalk Real", "RealLauncher.exe"],
+  "exe_candidates": [
+    "C:/Program Files/Wukong/0.9.65-26061702/DingTalkReal.exe",
+    "C:/Program Files/Wukong/RealLauncher.exe"
+  ],
+  "data_dirs": [
+    {
+      "path": "%APPDATA%/com.dingtalk.real",
+      "label": "悟空用户数据",
+      "include_subdirs": []
+    },
+    {
+      "path": "%APPDATA%/dingtalk-rewind-server",
+      "label": "Rewind服务数据",
+      "include_subdirs": []
+    }
+  ],
+  "skip_items": ["Cache", "Code Cache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache", "Logs", "blob_storage", "Crashpad", ".ckg", "apm-log-recovery", "alogs", "Shared Dictionary", "WebStorage", "SharedStorage", "MediaCache", "JumpListData"],
+  "machine_id": {
+    "type": "file",
+    "path": "%APPDATA%/com.dingtalk.real/bin/.dws/identity.json",
+    "label": "悟空设备标识"
+  },
+  "login_artifacts": [
+    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/identity" },
+    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/im" },
+    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/auth.json" },
+    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/token-cache.json" },
+    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/user-cache.json" },
+    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/settings.json" },
+    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/Local State" },
+    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/Preferences" },
+    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/Local Storage" },
+    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/Session Storage" },
+    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/IndexedDB" }
+  ],
+  "switch_flow": [
+    { "type": "ensure_not_running_or_kill", "timeout": 5000 },
+    { "type": "restore_snapshot" },
+    { "type": "write_machine_id" }
+  ],
+  "clear_login_flow": [
+    { "type": "ensure_not_running_or_kill", "timeout": 5000 },
+    { "type": "delete_login_artifacts" }
+  ]
+}"#
+}
+
+/// AutoClaw — AutoGLM 桌面客户端
+fn builtin_autoclaw_json() -> &'static str {
+    r#"{
+  "id": "autoclaw",
+  "name": "AutoClaw",
+  "version": "0.1.0",
+  "icon": "🦀",
+  "homepage": "https://autoglm.aminer.cn",
+  "process_names": ["AutoClaw.exe"],
+  "exe_candidates": [
+    "C:/Program Files/AutoClaw/AutoClaw.exe",
+    "C:/Program Files (x86)/AutoClaw/AutoClaw.exe"
+  ],
+  "data_dirs": [
+    {
+      "path": "%APPDATA%/autoclaw",
+      "label": "AutoClaw用户数据",
+      "include_subdirs": []
+    },
+    {
+      "path": "%USERPROFILE%/.openclaw-autoclaw",
+      "label": "工作区数据",
+      "include_subdirs": []
+    }
+  ],
+  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB", "SharedStorage", "MediaCache", "JumpListData", "chrome-ext", "Dictionaries", "DIPS"],
+  "machine_id": {
+    "type": "file",
+    "path": "%APPDATA%/autoclaw/identity/device.json",
+    "label": "AutoClaw设备码"
+  },
+  "login_artifacts": [
+    { "type": "file", "path": "%APPDATA%/autoclaw/auth.json" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/token-cache.json" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/user-cache.json" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/settings.json" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/identity/device.json" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/Local State" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/Preferences" },
+    { "type": "dir", "path": "%APPDATA%/autoclaw/Local Storage" },
+    { "type": "dir", "path": "%APPDATA%/autoclaw/Session Storage" },
+    { "type": "dir", "path": "%APPDATA%/autoclaw/IndexedDB" },
+    { "type": "dir", "path": "%APPDATA%/autoclaw/im" },
+    { "type": "file", "path": "%APPDATA%/autoclaw/risk-agreement.json" }
+  ],
+  "switch_flow": [
+    { "type": "ensure_not_running_or_kill", "timeout": 5000 },
+    { "type": "restore_snapshot" },
+    { "type": "write_machine_id" }
+  ],
+  "clear_login_flow": [
+    { "type": "ensure_not_running_or_kill", "timeout": 5000 },
+    { "type": "delete_login_artifacts" }
+  ]
+}"#
+}
+
+/// Loomy — AI 助手桌面客户端
+fn builtin_loomy_json() -> &'static str {
+    r#"{
+  "id": "loomy",
+  "name": "Loomy",
+  "version": "0.1.0",
+  "icon": "🌸",
+  "homepage": "",
+  "process_names": ["Loomy.exe"],
+  "exe_candidates": [
+    "C:/Program Files/Loomy/Loomy.exe"
+  ],
+  "data_dirs": [
+    {
+      "path": "%APPDATA%/loomy",
+      "label": "Loomy用户数据",
+      "include_subdirs": []
+    }
+  ],
+  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB", "SharedStorage", "MediaCache", "JumpListData", "Dictionaries", "DIPS"],
+  "machine_id": {
+    "type": "file",
+    "path": "%APPDATA%/loomy/app-ui-state.json",
+    "label": "Loomy设备标识"
+  },
+  "login_artifacts": [
+    { "type": "file", "path": "%APPDATA%/loomy/app-ui-state.json" },
+    { "type": "file", "path": "%APPDATA%/loomy/pet-work.json" },
+    { "type": "file", "path": "%APPDATA%/loomy/Local State" },
+    { "type": "file", "path": "%APPDATA%/loomy/Preferences" },
+    { "type": "dir", "path": "%APPDATA%/loomy/Local Storage" },
+    { "type": "dir", "path": "%APPDATA%/loomy/Session Storage" },
+    { "type": "dir", "path": "%APPDATA%/loomy/IndexedDB" },
+    { "type": "dir", "path": "%APPDATA%/loomy/Partitions" }
+  ],
+  "switch_flow": [
+    { "type": "ensure_not_running_or_kill", "timeout": 5000 },
+    { "type": "restore_snapshot" },
+    { "type": "write_machine_id" }
+  ],
+  "clear_login_flow": [
+    { "type": "ensure_not_running_or_kill", "timeout": 5000 },
+    { "type": "delete_login_artifacts" }
   ]
 }"#
 }

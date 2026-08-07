@@ -45,16 +45,6 @@ export const usePluginStore = defineStore("plugins", () => {
     await load();
   }
 
-  async function add(config: unknown) {
-    await api.addPlugin(config);
-    await load();
-  }
-
-  async function remove(pluginId: string) {
-    await api.deletePlugin(pluginId);
-    await load();
-  }
-
   return {
     plugins,
     activePluginId,
@@ -64,7 +54,5 @@ export const usePluginStore = defineStore("plugins", () => {
     reload,
     selectPlugin,
     toggle,
-    add,
-    remove,
   };
 });

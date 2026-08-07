@@ -20,10 +20,6 @@ export const enablePlugin = (pluginId: string) =>
   invoke<void>("enable_plugin", { pluginId });
 export const disablePlugin = (pluginId: string) =>
   invoke<void>("disable_plugin", { pluginId });
-export const addPlugin = (config: unknown) =>
-  invoke<void>("add_plugin", { config });
-export const deletePlugin = (pluginId: string) =>
-  invoke<void>("delete_plugin", { pluginId });
 export const setPluginPaths = (params: { pluginId: string; exePath: string }) =>
   invoke<void>("set_plugin_paths", params);
 export const getPluginConfig = (pluginId: string) =>
@@ -64,9 +60,6 @@ export const getMachineId = (pluginId: string) =>
   invoke<MachineIdInfo>("get_machine_id", { pluginId });
 export const resetMachineId = (pluginId: string) =>
   invoke<void>("reset_machine_id", { pluginId });
-/** 换新设备码: 生成全新随机 machineid 写入 + 同步 telemetry, 用于重新签到 */
-export const regenerateMachineId = (pluginId: string) =>
-  invoke<string>("regenerate_machine_id", { pluginId });
 
 // ===== 设置 =====
 export const getSettings = () => invoke<AppSettings>("get_settings");

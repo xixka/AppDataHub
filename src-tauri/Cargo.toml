@@ -3,7 +3,7 @@ name = "appdatahub"
 version = "0.2.0"
 description = "AppDataHub — AI 软件多账号切换管理器"
 authors = ["xixka"]
-edition = "2021"
+edition = "2018"
 
 [lib]
 name = "appdatahub_lib"
