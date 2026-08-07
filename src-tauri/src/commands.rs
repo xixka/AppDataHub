@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
 
 use crate::account::{Account, AccountMetadata};
-use crate::flow::{self, FlowResult, FlowSettings};
+use crate::flow::{self, FlowContext, FlowResult, FlowSettings};
 use crate::plugin::{PluginConfig, PluginError, PluginInfo};
 use crate::store::{Store, StoreError};
 

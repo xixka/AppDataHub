@@ -14,6 +14,8 @@ pub enum PluginError {
     Io(#[from] std::io::Error),
     #[error("序列化错误: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("配置错误: {0}")]
+    Config(#[from] crate::config::ConfigError),
     #[error("插件不存在: {0}")]
     NotFound(String),
     #[error("插件路径未配置: {0}")]
@@ -182,7 +184,7 @@ impl PluginManager {
 
         // 内置插件
         let builtin_ids = vec!["trae-cn"];
-        for id in builtin_ids {
+        for id in &builtin_ids {
             if let Ok(cfg) = self.load_plugin(id) {
                 let exe_path = self.get_exe_path(&cfg);
                 result.push(PluginInfo {
@@ -192,7 +194,7 @@ impl PluginManager {
                     icon: cfg.icon,
                     is_builtin: true,
                     has_paths: exe_path.is_some(),
-                    exe_path: exe_path,
+                    exe_path,
                 });
             }
         }

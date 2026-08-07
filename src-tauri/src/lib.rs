@@ -4,6 +4,7 @@
 //! Rust 后端是通用引擎，解析并执行 JSON 插件定义的步骤
 
 pub mod account;
+#[cfg(feature = "tauri-runtime")]
 pub mod commands;
 pub mod config;
 pub mod crypto;
