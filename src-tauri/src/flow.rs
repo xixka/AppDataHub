@@ -263,15 +263,11 @@ fn delete_login_artifacts(ctx: &FlowContext) -> Result<(), PluginError> {
     for artifact in &ctx.plugin.login_artifacts {
         let path = crate::plugin::expand_env(&artifact.path);
         match artifact.artifact_type.as_str() {
-            "file" => {
-                if path.exists() {
-                    let _ = fs::remove_file(&path);
-                }
+            "file" if path.exists() => {
+                let _ = fs::remove_file(&path);
             }
-            "dir" => {
-                if path.exists() {
-                    let _ = fs::remove_dir_all(&path);
-                }
+            "dir" if path.exists() => {
+                let _ = fs::remove_dir_all(&path);
             }
             _ => {}
         }

@@ -113,7 +113,7 @@ impl Store {
         let mut acc = Account::new(name, email, note, plugin_id);
 
         // 如果有机器码定义, 绑定当前机器码
-        acc.bound_machine_id = machine_id.map(|m| m);
+        acc.bound_machine_id = machine_id;
 
         self.data.accounts.push(acc.clone());
         self.save()?;
