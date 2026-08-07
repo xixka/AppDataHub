@@ -72,6 +72,10 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             // 插件
             commands::list_plugins,
             commands::reload_plugins,
+            commands::enable_plugin,
+            commands::disable_plugin,
+            commands::add_plugin,
+            commands::delete_plugin,
             commands::set_plugin_paths,
             commands::get_plugin_config,
             // 账号

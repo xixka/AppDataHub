@@ -16,6 +16,10 @@
       </el-menu-item>
     </el-menu>
     <div class="sidebar-footer">
+      <el-button text size="small" @click="goPlugins">
+        <el-icon><Box /></el-icon>
+        插件管理
+      </el-button>
       <el-button text size="small" @click="goSettings">
         <el-icon><Setting /></el-icon>
         设置
@@ -35,6 +39,10 @@ const pluginStore = usePluginStore();
 function onSelect(index: string) {
   pluginStore.selectPlugin(index);
   router.push("/");
+}
+
+function goPlugins() {
+  router.push("/plugins");
 }
 
 function goSettings() {

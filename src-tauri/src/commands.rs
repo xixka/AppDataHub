@@ -69,6 +69,56 @@ pub fn reload_plugins(
 }
 
 #[tauri::command]
+pub fn enable_plugin(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mut mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    mgr.enable_plugin(&plugin_id)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn disable_plugin(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mut mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    mgr.disable_plugin(&plugin_id)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn add_plugin(
+    config: serde_json::Value,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let cfg: PluginConfig = serde_json::from_value(config)
+        .map_err(|e| CommandError::Plugin(format!("插件配置解析失败: {}", e)))?;
+    mgr.add_custom_plugin(&cfg)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_plugin(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    mgr.delete_custom_plugin(&plugin_id)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn set_plugin_paths(
     plugin_id: String,
     exe_path: String,

@@ -126,8 +126,8 @@ fn default_timeout() -> u64 {
 /// 插件管理器 — 加载、查询插件
 pub struct PluginManager {
     plugins_dir: PathBuf,
-    /// 用户路径覆盖 (plugin_id -> exe_path)
     exe_overrides: std::collections::HashMap<String, String>,
+    disabled_plugins: Vec<String>,
 }
 
 impl PluginManager {
@@ -135,41 +135,50 @@ impl PluginManager {
         Self {
             plugins_dir,
             exe_overrides: std::collections::HashMap::new(),
+            disabled_plugins: Vec::new(),
         }
     }
 
-    /// 初始化: 创建内置插件文件 (如果不存在)
     pub fn init_builtin(&mut self) -> Result<(), PluginError> {
         std::fs::create_dir_all(&self.plugins_dir)?;
-
-        // Trae CN 内置插件
         let trae_path = self.plugins_dir.join("trae-cn.json");
         if !trae_path.exists() {
             std::fs::write(&trae_path, builtin_trae_cn_json())?;
         }
-
         self.load_overrides()?;
+        self.load_disabled()?;
         Ok(())
     }
 
-    /// 重新加载 (重读 overrides)
     pub fn reload(&mut self, _data_dir: &std::path::Path) -> Result<(), PluginError> {
-        self.load_overrides()
+        self.load_overrides()?;
+        self.load_disabled()?;
+        Ok(())
     }
 
     fn load_overrides(&mut self) -> Result<(), PluginError> {
-        let overrides_file = self.plugins_dir.join("exe-overrides.json");
-        if overrides_file.exists() {
-            let content = std::fs::read_to_string(&overrides_file)?;
-            self.exe_overrides = serde_json::from_str(&content).unwrap_or_default();
+        let f = self.plugins_dir.join("exe-overrides.json");
+        if f.exists() {
+            self.exe_overrides = serde_json::from_str(&std::fs::read_to_string(f)?).unwrap_or_default();
         }
         Ok(())
     }
 
+    fn load_disabled(&mut self) -> Result<(), PluginError> {
+        let f = self.plugins_dir.join("disabled.json");
+        if f.exists() {
+            self.disabled_plugins = serde_json::from_str(&std::fs::read_to_string(f)?).unwrap_or_default();
+        }
+        Ok(())
+    }
+
+    fn save_disabled(&self) -> Result<(), PluginError> {
+        std::fs::write(self.plugins_dir.join("disabled.json"), serde_json::to_string_pretty(&self.disabled_plugins)?)?;
+        Ok(())
+    }
+
     pub fn save_overrides(&self) -> Result<(), PluginError> {
-        let overrides_file = self.plugins_dir.join("exe-overrides.json");
-        let content = serde_json::to_string_pretty(&self.exe_overrides)?;
-        std::fs::write(&overrides_file, content)?;
+        std::fs::write(self.plugins_dir.join("exe-overrides.json"), serde_json::to_string_pretty(&self.exe_overrides)?)?;
         Ok(())
     }
 
@@ -177,6 +186,45 @@ impl PluginManager {
         self.exe_overrides.insert(plugin_id.to_string(), exe_path.to_string());
         self.save_overrides()?;
         Ok(())
+    }
+
+    pub fn enable_plugin(&mut self, plugin_id: &str) -> Result<(), PluginError> {
+        self.disabled_plugins.retain(|id| id != plugin_id);
+        self.save_disabled()?;
+        Ok(())
+    }
+
+    pub fn disable_plugin(&mut self, plugin_id: &str) -> Result<(), PluginError> {
+        if !self.disabled_plugins.contains(&plugin_id.to_string()) {
+            self.disabled_plugins.push(plugin_id.to_string());
+        }
+        self.save_disabled()?;
+        Ok(())
+    }
+
+    pub fn add_custom_plugin(&self, config: &PluginConfig) -> Result<(), PluginError> {
+        let path = self.plugins_dir.join(format!("{}.json", config.id));
+        if path.exists() {
+            return Err(PluginError::Other(format!("插件 {} 已存在", config.id)));
+        }
+        std::fs::write(path, serde_json::to_string_pretty(config)?)?;
+        Ok(())
+    }
+
+    pub fn delete_custom_plugin(&self, plugin_id: &str) -> Result<(), PluginError> {
+        let builtin = vec!["trae-cn"];
+        if builtin.contains(&plugin_id) {
+            return Err(PluginError::Other("不能删除内置插件".into()));
+        }
+        let path = self.plugins_dir.join(format!("{}.json", plugin_id));
+        if path.exists() {
+            std::fs::remove_file(path)?;
+        }
+        Ok(())
+    }
+
+    pub fn is_disabled(&self, plugin_id: &str) -> bool {
+        self.disabled_plugins.contains(&plugin_id.to_string())
     }
 
     pub fn list(&self) -> Vec<PluginInfo> {
@@ -193,6 +241,7 @@ impl PluginManager {
                     version: cfg.version,
                     icon: cfg.icon,
                     is_builtin: true,
+                    enabled: !self.is_disabled(&cfg.id),
                     has_paths: exe_path.is_some(),
                     exe_path,
                 });
@@ -218,6 +267,7 @@ impl PluginManager {
                         version: cfg.version,
                         icon: cfg.icon,
                         is_builtin: false,
+                    enabled: !self.is_disabled(&cfg.id),
                         has_paths: exe_path.is_some(),
                         exe_path,
                     });
@@ -275,6 +325,7 @@ pub struct PluginInfo {
     pub version: String,
     pub icon: String,
     pub is_builtin: bool,
+    pub enabled: bool,
     pub has_paths: bool,
     pub exe_path: Option<String>,
 }

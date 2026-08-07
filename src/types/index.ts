@@ -83,6 +83,7 @@ export interface PluginInfo {
   version: string;
   icon: string;
   is_builtin: boolean;
+  enabled: boolean;
   has_paths: boolean;
   exe_path: string | null;
 }

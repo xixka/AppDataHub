@@ -15,6 +15,14 @@ import type {
 // ===== 插件 =====
 export const listPlugins = () => invoke<PluginInfo[]>("list_plugins");
 export const reloadPlugins = () => invoke<void>("reload_plugins");
+export const enablePlugin = (pluginId: string) =>
+  invoke<void>("enable_plugin", { pluginId });
+export const disablePlugin = (pluginId: string) =>
+  invoke<void>("disable_plugin", { pluginId });
+export const addPlugin = (config: unknown) =>
+  invoke<void>("add_plugin", { config });
+export const deletePlugin = (pluginId: string) =>
+  invoke<void>("delete_plugin", { pluginId });
 export const setPluginPaths = (params: { pluginId: string; exePath: string }) =>
   invoke<void>("set_plugin_paths", params);
 export const getPluginConfig = (pluginId: string) =>

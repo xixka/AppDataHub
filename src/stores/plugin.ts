@@ -36,6 +36,25 @@ export const usePluginStore = defineStore("plugins", () => {
     activePluginId.value = id;
   }
 
+  async function toggle(pluginId: string, enabled: boolean) {
+    if (enabled) {
+      await api.enablePlugin(pluginId);
+    } else {
+      await api.disablePlugin(pluginId);
+    }
+    await load();
+  }
+
+  async function add(config: unknown) {
+    await api.addPlugin(config);
+    await load();
+  }
+
+  async function remove(pluginId: string) {
+    await api.deletePlugin(pluginId);
+    await load();
+  }
+
   return {
     plugins,
     activePluginId,
@@ -44,5 +63,8 @@ export const usePluginStore = defineStore("plugins", () => {
     load,
     reload,
     selectPlugin,
+    toggle,
+    add,
+    remove,
   };
 });
