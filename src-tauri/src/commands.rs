@@ -3,7 +3,7 @@
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, State};
+use tauri::State;
 
 use crate::account::{Account, AccountMetadata};
 use crate::flow::{self, FlowContext, FlowResult, FlowSettings};
@@ -306,7 +306,7 @@ pub fn reset_machine_id(
     let ctx = FlowContext {
         plugin,
         account: dummy_account,
-        snapshot_dir: store.snapshots_dir(),
+        snapshot_dir: store.snapshots_dir().to_path_buf(),
         settings: Default::default(),
     };
     flow::reset_machine_id(&ctx)?;

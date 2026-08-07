@@ -242,16 +242,18 @@ pub fn reset_machine_id(ctx: &FlowContext) -> Result<(), PluginError> {
             use winreg::enums::*;
             use winreg::RegKey;
             let hk = if path.starts_with("HKEY_CURRENT_USER") {
-                HKCU
+                HKEY_CURRENT_USER
             } else {
-                HKLM
+                HKEY_LOCAL_MACHINE
             };
             let subpath = path
                 .to_string_lossy()
                 .trim_start_matches("HKEY_CURRENT_USER\\")
                 .trim_start_matches("HKEY_LOCAL_MACHINE\\");
             let key = mid.key.as_deref().unwrap_or("");
-            let _ = RegKey::predef(hk).delete_value(subpath, key);
+            if let Ok(subkey) = RegKey::predef(hk).open_subkey(subpath) {
+                let _ = subkey.delete_value(key);
+            }
             Ok(())
         }
         _ => Ok(()),
@@ -320,9 +322,9 @@ fn write_machine_id_value(spec: &MachineIdSpec, value: &str) -> Result<(), Plugi
             use winreg::enums::*;
             use winreg::RegKey;
             let hk = if spec.path.starts_with("HKEY_CURRENT_USER") {
-                HKCU
+                HKEY_CURRENT_USER
             } else {
-                HKLM
+                HKEY_LOCAL_MACHINE
             };
             let subpath = spec
                 .path
@@ -355,9 +357,9 @@ pub fn read_machine_id(spec: &MachineIdSpec) -> Result<Option<String>, PluginErr
             use winreg::enums::*;
             use winreg::RegKey;
             let hk = if spec.path.starts_with("HKEY_CURRENT_USER") {
-                HKCU
+                HKEY_CURRENT_USER
             } else {
-                HKLM
+                HKEY_LOCAL_MACHINE
             };
             let subpath = spec
                 .path
