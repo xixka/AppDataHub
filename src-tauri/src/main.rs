@@ -1,5 +1,5 @@
-// Prevents additional console window on Windows in release
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// 隐藏 Windows 控制台窗口 (debug + release 都隐藏)
+#![windows_subsystem = "windows"]
 
 use std::sync::Mutex;
 
@@ -97,6 +97,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             // 杂项
             commands::open_data_dir,
             commands::get_logs_path,
+            commands::get_license,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| format!("Tauri 启动失败: {}", e).into())

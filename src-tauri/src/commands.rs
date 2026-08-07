@@ -398,6 +398,12 @@ pub fn get_logs_path(store: State<'_, Mutex<Store>>) -> Result<String, CommandEr
     Ok(store.data_dir().join("logs").to_string_lossy().into_owned())
 }
 
+/// 获取内置 LICENSE 文本
+#[tauri::command]
+pub fn get_license() -> String {
+    include_str!("../../LICENSE").to_string()
+}
+
 fn open_folder(path: &std::path::Path) {
     #[cfg(target_os = "windows")]
     {

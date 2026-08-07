@@ -73,18 +73,13 @@ jobs:
           CXXFLAGS: /std:c++17 /EHsc
         run: npx tauri build --target x86_64-pc-windows-msvc --no-bundle --ci --debug
 
-      - name: Package dev ZIP
+      - name: Rename exe
         shell: pwsh
         run: |
-          $portableDir = "portable\AppDataHub-x64"
-          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
-          Copy-Item "src-tauri\target\x86_64-pc-windows-msvc\debug\appdatahub.exe" (Join-Path $portableDir "AppDataHub.exe") -Force
-          Copy-Item "LICENSE" (Join-Path $portableDir "LICENSE") -Force
-          Set-Content -Path (Join-Path $portableDir "portable.marker") -Value "" -NoNewline
-          Compress-Archive -Path (Join-Path $portableDir "*") -DestinationPath "AppDataHub-dev.zip" -Force
-          Write-Host "Package size: $((Get-Item AppDataHub-dev.zip).Length / 1KB) KB"
+          Copy-Item "src-tauri\target\x86_64-pc-windows-msvc\debug\appdatahub.exe" "AppDataHub.exe" -Force
+          Write-Host "Exe size: $((Get-Item AppDataHub.exe).Length / 1MB) MB"
 
-      - name: Upload dev ZIP to Release
+      - name: Upload exe to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev
@@ -95,7 +90,7 @@ jobs:
             Commit: ${{ github.sha }}
             Build: #${{ github.run_number }}
             时间: ${{ github.run_started_at }} UTC
-          files: AppDataHub-dev.zip
+          files: AppDataHub.exe
           prerelease: true
           draft: false
         env:

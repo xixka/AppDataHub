@@ -1,9 +1,5 @@
 <template>
   <div class="sidebar-inner">
-    <div class="logo">
-      <el-icon :size="24" color="#3b82f6"><Switch /></el-icon>
-      <span class="logo-text">AppDataHub</span>
-    </div>
     <el-menu
       :default-active="pluginStore.activePluginId"
       @select="onSelect"
@@ -30,7 +26,7 @@
 
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import { Switch, Box, Setting } from "@element-plus/icons-vue";
+import { Box, Setting } from "@element-plus/icons-vue";
 import { usePluginStore } from "@/stores/plugin";
 
 const router = useRouter();
@@ -51,19 +47,6 @@ function goSettings() {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 16px;
-  border-bottom: 1px solid var(--el-border-color-light);
-}
-
-.logo-text {
-  font-weight: 600;
-  font-size: 15px;
 }
 
 .plugin-menu {

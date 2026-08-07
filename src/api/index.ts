@@ -71,3 +71,4 @@ export const importData = (json: string) =>
 // ===== 杂项 =====
 export const openDataDir = () => invoke<void>("open_data_dir");
 export const getLogsPath = () => invoke<string>("get_logs_path");
+export const getLicense = () => invoke<string>("get_license");

@@ -27,17 +27,37 @@
       <el-button @click="onImport">导入数据</el-button>
       <el-button @click="onOpenDir">打开数据目录</el-button>
     </el-card>
+
+    <el-card class="settings-card" shadow="never">
+      <template #header>关于</template>
+      <p>AppDataHub v0.2.0 — AI 软件多账号切换管理器</p>
+      <el-button text size="small" @click="showLicense = true">查看 LICENSE</el-button>
+    </el-card>
+
+    <el-dialog v-model="showLicense" title="LICENSE" width="600px">
+      <pre class="license-text">{{ licenseText }}</pre>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import * as api from "@/api";
 import { useSettingsStore } from "@/stores/settings";
 
 const settingsStore = useSettingsStore();
 const settings = ref({ ...settingsStore.settings });
+const showLicense = ref(false);
+const licenseText = ref("");
+
+onMounted(async () => {
+  try {
+    licenseText.value = await api.getLicense();
+  } catch {
+    licenseText.value = "LICENSE 加载失败";
+  }
+});
 
 async function saveSettings() {
   await settingsStore.save(settings.value);
@@ -82,5 +102,13 @@ async function onOpenDir() {
 
 .settings-card {
   margin-bottom: 16px;
+}
+
+.license-text {
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 </style>
