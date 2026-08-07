@@ -58,7 +58,7 @@ fn run_app() -> Result<(), Box<dyn std::error::Error>> {
             // 初始化插件管理器
             let plugins_dir = data_dir.join("plugins");
             std::fs::create_dir_all(&plugins_dir)?;
-            let mut plugin_mgr = PluginManager::new(data_dir.clone(), plugins_dir);
+            let mut plugin_mgr = PluginManager::new(plugins_dir);
             if let Err(e) = plugin_mgr.init_builtin() {
                 eprintln!("警告: 初始化插件失败: {}", e);
             }
