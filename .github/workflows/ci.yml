@@ -36,7 +36,7 @@ jobs:
     name: Build Windows Dev
     needs: test-core
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: write
     steps:
@@ -47,8 +47,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install pnpm
+        run: npm install -g pnpm
+
       - name: Install dependencies
-        run: npm install
+        run: pnpm install
+
+      - name: Build frontend
+        run: pnpm build
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

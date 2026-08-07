@@ -1,22 +1,22 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AppDataHub",
-  "version": "0.1.0",
-  "identifier": "com.appdatahub",
+  "version": "0.2.0",
+  "identifier": "com.appdatahub.app",
   "build": {
-    "frontendDist": "../src",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
         "title": "AppDataHub",
-        "width": 900,
+        "width": 960,
         "height": 680,
-        "minWidth": 720,
+        "minWidth": 800,
         "minHeight": 560,
         "resizable": true,
         "center": true,
@@ -39,8 +39,8 @@
     ],
     "publisher": "appdatahub",
     "category": "Utility",
-    "shortDescription": "Windows 应用数据切换",
-    "longDescription": "AppDataHub — 管理 Windows 应用多账号配置，一键切换"
+    "shortDescription": "AI 软件多账号切换管理器",
+    "longDescription": "AppDataHub — 管理 AI 软件多账号配置，一键切换"
   },
   "plugins": {
     "shell": {

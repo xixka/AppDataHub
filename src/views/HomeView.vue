@@ -1,0 +1,162 @@
+<template>
+  <div class="home">
+    <div v-if="!pluginStore.activePlugin" class="empty-state">
+      <el-empty description="请先在设置中配置插件路径" />
+    </div>
+
+    <template v-else>
+      <!-- 顶部信息栏 -->
+      <div class="header-bar">
+        <div>
+          <h2>{{ pluginStore.activePlugin.name }}</h2>
+          <div class="header-meta">
+            <el-tag size="small" :type="appRunning ? 'danger' : 'success'">
+              {{ appRunning ? "运行中" : "未运行" }}
+            </el-tag>
+            <el-button text size="small" @click="checkRunning">刷新</el-button>
+          </div>
+        </div>
+        <div class="header-actions">
+          <el-button type="primary" @click="showAdd = true">
+            <el-icon><Plus /></el-icon> 添加账号
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 账号列表 -->
+      <div v-loading="accountStore.loading">
+        <el-empty
+          v-if="accountStore.accounts.length === 0"
+          description="还没有账号，点击「添加账号」创建第一个"
+        />
+        <div v-else class="account-list">
+          <AccountCard
+            v-for="acc in accountStore.accounts"
+            :key="acc.id"
+            :account="acc"
+            @switch="onSwitch"
+            @save="onSave"
+            @edit="onEdit"
+            @delete="onDelete"
+          />
+        </div>
+      </div>
+
+      <!-- 添加/编辑对话框 -->
+      <AddAccountDialog
+        v-model:visible="showAdd"
+        :plugin-id="pluginStore.activePluginId"
+        :editing="editingAccount"
+      />
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, onMounted } from "vue";
+import { Plus } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { usePluginStore } from "@/stores/plugin";
+import { useAccountStore } from "@/stores/account";
+import * as api from "@/api";
+import type { AccountMetadata } from "@/types";
+import AccountCard from "@/components/AccountCard.vue";
+import AddAccountDialog from "@/components/AddAccountDialog.vue";
+
+const pluginStore = usePluginStore();
+const accountStore = useAccountStore();
+const showAdd = ref(false);
+const editingAccount = ref<AccountMetadata | null>(null);
+const appRunning = ref(false);
+
+async function loadAccounts() {
+  if (pluginStore.activePluginId) {
+    await accountStore.load(pluginStore.activePluginId);
+    await checkRunning();
+  }
+}
+
+async function checkRunning() {
+  if (pluginStore.activePluginId) {
+    appRunning.value = await api.checkAppRunning(pluginStore.activePluginId);
+  }
+}
+
+async function onSwitch(id: string) {
+  try {
+    await ElMessageBox.confirm(
+      "切换账号将备份当前配置并恢复目标账号的配置，确定继续？",
+      "切换确认",
+      { type: "warning" },
+    );
+    await accountStore.switchTo(id, pluginStore.activePluginId);
+    ElMessage.success("切换成功");
+    await checkRunning();
+  } catch {
+    // 用户取消
+  }
+}
+
+async function onSave(id: string) {
+  await accountStore.saveSnapshot(id, pluginStore.activePluginId);
+  ElMessage.success("快照已保存");
+}
+
+function onEdit(acc: AccountMetadata) {
+  editingAccount.value = acc;
+  showAdd.value = true;
+}
+
+async function onDelete(id: string) {
+  try {
+    await ElMessageBox.confirm("确定删除此账号？快照数据也会清除", "删除确认", {
+      type: "warning",
+    });
+    await accountStore.remove(id, pluginStore.activePluginId);
+    ElMessage.success("已删除");
+  } catch {
+    // 用户取消
+  }
+}
+
+watch(() => pluginStore.activePluginId, loadAccounts);
+watch(() => showAdd.value, (v) => {
+  if (!v) editingAccount.value = null;
+});
+
+onMounted(loadAccounts);
+</script>
+
+<style scoped>
+.home {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-bar h2 {
+  margin: 0 0 4px 0;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.empty-state {
+  padding: 80px 0;
+}
+</style>

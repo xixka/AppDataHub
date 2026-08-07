@@ -1,7 +1,7 @@
 [package]
 name = "appdatahub"
-version = "0.1.0"
-description = "AppDataHub — Windows 应用数据切换工具"
+version = "0.2.0"
+description = "AppDataHub — AI 软件多账号切换管理器"
 authors = ["xixka"]
 edition = "2021"
 
@@ -23,6 +23,14 @@ thiserror = "1"
 base64 = "0.22"
 sha2 = "0.10"
 hex = "0.4"
+# 插件引擎
+walkdir = "2"
+# 日志
+tracing = "0.1"
+tracing-subscriber = "0.3"
+# 系统信息
+sysinfo = { version = "0.32", optional = true }
+winreg = { version = "0.52", optional = true }
 
 # Tauri (仅 tauri feature 下启用)
 tauri = { version = "2", features = [], optional = true }
@@ -32,13 +40,14 @@ tauri-plugin-fs = { version = "2", optional = true }
 
 [features]
 default = ["tauri-runtime"]
-# Tauri 运行时 (GUI) — 需要 GTK/WebKit 系统依赖
 tauri-runtime = [
     "dep:tauri",
     "dep:tauri-plugin-shell",
     "dep:tauri-plugin-dialog",
     "dep:tauri-plugin-fs",
     "dep:tauri-build",
+    "dep:sysinfo",
+    "dep:winreg",
 ]
 # 仅核心逻辑 (CI/测试用, 无需系统依赖)
 core-only = []

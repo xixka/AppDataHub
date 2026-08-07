@@ -1,10 +1,13 @@
 //! Tauri 命令 — 前端可调用的接口
 
-use std::path::PathBuf;
-use tauri::State;
+use std::sync::Mutex;
 
-use crate::account::AccountMetadata;
-use crate::config::{self, ProfileConfig};
+use serde::{Deserialize, Serialize};
+use tauri::{Manager, State};
+
+use crate::account::{Account, AccountMetadata};
+use crate::flow::{self, FlowResult, FlowSettings};
+use crate::plugin::{PluginConfig, PluginError, PluginInfo};
 use crate::store::{Store, StoreError};
 
 #[derive(Debug, thiserror::Error)]
@@ -12,7 +15,9 @@ pub enum CommandError {
     #[error("{0}")]
     Store(String),
     #[error("{0}")]
-    Config(String),
+    Plugin(String),
+    #[error("{0}")]
+    Other(String),
 }
 
 impl From<StoreError> for CommandError {
@@ -21,7 +26,13 @@ impl From<StoreError> for CommandError {
     }
 }
 
-impl serde::Serialize for CommandError {
+impl From<PluginError> for CommandError {
+    fn from(e: PluginError) -> Self {
+        CommandError::Plugin(e.to_string())
+    }
+}
+
+impl Serialize for CommandError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -30,14 +41,69 @@ impl serde::Serialize for CommandError {
     }
 }
 
+// ===== 插件 =====
+
+#[tauri::command]
+pub fn list_plugins(
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<Vec<PluginInfo>, CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    Ok(mgr.list())
+}
+
+#[tauri::command]
+pub fn reload_plugins(
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+    store: State<'_, Mutex<Store>>,
+) -> Result<(), CommandError> {
+    let mut mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    mgr.reload(store.data_dir())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_plugin_paths(
+    plugin_id: String,
+    exe_path: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mut mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    mgr.set_exe_path(&plugin_id, &exe_path)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_plugin_config(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<PluginConfig, CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let cfg = mgr.get(&plugin_id)?;
+    Ok(cfg.clone())
+}
+
+// ===== 账号 =====
+
 #[tauri::command]
 pub fn list_accounts(
-    store: State<'_, std::sync::Mutex<Store>>,
+    plugin_id: String,
+    store: State<'_, Mutex<Store>>,
 ) -> Result<Vec<AccountMetadata>, CommandError> {
     let store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    Ok(store.list_accounts())
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    Ok(store.list_accounts(&plugin_id))
 }
 
 #[tauri::command]
@@ -45,139 +111,306 @@ pub fn add_account(
     name: String,
     email: Option<String>,
     note: Option<String>,
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<String, CommandError> {
+    plugin_id: String,
+    machine_id: Option<String>,
+    store: State<'_, Mutex<Store>>,
+) -> Result<Account, CommandError> {
     let mut store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    let account = store.add_account(name, email, note)?;
-    Ok(account.id)
-}
+        .map_err(|e| CommandError::Other(e.to_string()))?;
 
-#[tauri::command]
-pub fn delete_account(
-    id: String,
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<(), CommandError> {
-    let mut store = store
-        .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    store.delete_account(&id)?;
-    Ok(())
+    let acc = store.add_account(name, email, note, plugin_id, machine_id)?;
+    Ok(acc)
 }
 
 #[tauri::command]
 pub fn update_account(
     id: String,
-    name: Option<String>,
-    email: Option<Option<String>>,
-    note: Option<Option<String>>,
-    store: State<'_, std::sync::Mutex<Store>>,
+    name: String,
+    email: Option<String>,
+    note: Option<String>,
+    store: State<'_, Mutex<Store>>,
 ) -> Result<(), CommandError> {
     let mut store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
+        .map_err(|e| CommandError::Other(e.to_string()))?;
     store.update_account(&id, name, email, note)?;
     Ok(())
 }
 
 #[tauri::command]
+pub fn delete_account(
+    id: String,
+    store: State<'_, Mutex<Store>>,
+) -> Result<(), CommandError> {
+    let mut store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    store.delete_account(&id)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn save_snapshot(
+    account_id: String,
+    store: State<'_, Mutex<Store>>,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mut store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+
+    let acc = store.get_account(&account_id)?.clone();
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&acc.plugin_id)?.clone();
+
+    drop(mgr);
+    store.save_snapshot(&account_id, &plugin)?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn switch_account(
-    id: String,
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<(), CommandError> {
+    account_id: String,
+    store: State<'_, Mutex<Store>>,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<FlowResult, CommandError> {
     let mut store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    store.switch_account(&id)?;
-    Ok(())
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+
+    let acc = store.get_account(&account_id)?.clone();
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&acc.plugin_id)?.clone();
+
+    drop(mgr);
+    let result = store.switch_account(&account_id, &plugin)?;
+    Ok(result)
 }
 
 #[tauri::command]
-pub fn save_current_snapshot(
-    id: String,
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<(), CommandError> {
+pub fn clear_login_state(
+    plugin_id: String,
+    store: State<'_, Mutex<Store>>,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<FlowResult, CommandError> {
     let mut store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    store.save_current_snapshot(&id)?;
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?.clone();
+
+    drop(mgr);
+    let result = store.clear_login(&plugin)?;
+    Ok(result)
+}
+
+// ===== 应用管理 =====
+
+#[tauri::command]
+pub fn check_app_running(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<bool, CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?;
+    Ok(flow::is_app_running(&plugin))
+}
+
+#[tauri::command]
+pub fn launch_app(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<(), CommandError> {
+    let mgr = plugin_mgr
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?;
+    let exe_path = mgr
+        .get_exe_path(&plugin)
+        .ok_or_else(|| CommandError::Plugin(format!("未找到 {} 可执行文件", plugin.name)))?;
+    drop(mgr);
+
+    std::process::Command::new(&exe_path)
+        .spawn()
+        .map_err(|e| CommandError::Other(format!("启动失败: {}", e)))?;
     Ok(())
 }
 
-/// 获取当前 profile 信息
+// ===== 机器码 =====
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MachineIdInfo {
+    pub plugin_id: String,
+    pub spec: crate::plugin::MachineIdSpec,
+    pub current_value: Option<String>,
+    pub exists: bool,
+}
+
 #[tauri::command]
-pub fn get_profile_info(
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<ProfileInfo, CommandError> {
-    let store = store
+pub fn get_machine_id(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+) -> Result<MachineIdInfo, CommandError> {
+    let mgr = plugin_mgr
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    let (cfg, usr, exists) = store.get_profile_info();
-    Ok(ProfileInfo {
-        config_dir: cfg.to_string_lossy().into_owned(),
-        user_dir: usr.map(|p| p.to_string_lossy().into_owned()),
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?;
+    let spec = &plugin.machine_id;
+    let value = flow::read_machine_id(spec)?;
+    let exists = value.is_some();
+    Ok(MachineIdInfo {
+        plugin_id: plugin_id.clone(),
+        spec: spec.clone(),
+        current_value: value,
         exists,
     })
 }
 
-/// 手动设置 profile 路径
 #[tauri::command]
-pub fn set_profile_paths(
-    config_dir: String,
-    user_dir: Option<String>,
-    store: State<'_, std::sync::Mutex<Store>>,
+pub fn reset_machine_id(
+    plugin_id: String,
+    plugin_mgr: State<'_, Mutex<crate::plugin::PluginManager>>,
+    store: State<'_, Mutex<Store>>,
 ) -> Result<(), CommandError> {
-    let mut store = store
+    let mgr = plugin_mgr
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    store.set_profile_paths(PathBuf::from(config_dir), user_dir.map(PathBuf::from));
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let plugin = mgr.get(&plugin_id)?;
+    drop(mgr);
+
+    let store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let dummy_account = Account {
+        id: "__reset__".into(),
+        name: "reset".into(),
+        email: None,
+        note: None,
+        plugin_id: plugin_id.clone(),
+        bound_machine_id: None,
+        token_enc: None,
+        created_at: chrono::Utc::now(),
+        last_used_at: None,
+        is_active: false,
+        has_snapshot: false,
+    };
+    let ctx = FlowContext {
+        plugin,
+        account: dummy_account,
+        snapshot_dir: store.snapshots_dir(),
+        settings: Default::default(),
+    };
+    flow::reset_machine_id(&ctx)?;
     Ok(())
 }
 
-/// 从配置文件加载所有可用 profiles
-#[tauri::command]
-pub fn list_profiles(
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<Vec<ProfileConfig>, CommandError> {
-    let store = store
-        .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    Ok(store.list_profiles())
+// ===== 设置 =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppSettings {
+    pub auto_kill: bool,
+    pub auto_launch_after_switch: bool,
+    pub theme: String,
 }
 
-/// 切换当前使用的 profile
+impl From<&FlowSettings> for AppSettings {
+    fn from(s: &FlowSettings) -> Self {
+        Self {
+            auto_kill: s.auto_kill,
+            auto_launch_after_switch: s.auto_launch_after_switch,
+            theme: "light".into(),
+        }
+    }
+}
+
 #[tauri::command]
-pub fn select_profile(
-    index: usize,
-    store: State<'_, std::sync::Mutex<Store>>,
+pub fn get_settings(store: State<'_, Mutex<Store>>) -> Result<AppSettings, CommandError> {
+    let store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    Ok(AppSettings::from(store.get_settings()))
+}
+
+#[tauri::command]
+pub fn update_settings(
+    settings: AppSettings,
+    store: State<'_, Mutex<Store>>,
 ) -> Result<(), CommandError> {
     let mut store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    store.select_profile(index)?;
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let flow_settings = FlowSettings {
+        auto_kill: settings.auto_kill,
+        auto_launch_after_switch: settings.auto_launch_after_switch,
+    };
+    store.update_settings(flow_settings)?;
+    Ok(())
+}
+
+// ===== 导入导出 =====
+
+#[tauri::command]
+pub fn export_data(store: State<'_, Mutex<Store>>) -> Result<String, CommandError> {
+    let store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    Ok(store.export_data()?)
+}
+
+#[tauri::command]
+pub fn import_data(
+    json: String,
+    store: State<'_, Mutex<Store>>,
+) -> Result<(), CommandError> {
+    let mut store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    store.import_data(&json)?;
+    Ok(())
+}
+
+// ===== 杂项 =====
+
+#[tauri::command]
+pub fn open_data_dir(store: State<'_, Mutex<Store>>) -> Result<(), CommandError> {
+    let store = store
+        .lock()
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    let path = store.data_dir().clone();
+    open_folder(&path);
     Ok(())
 }
 
 #[tauri::command]
-pub fn check_app_running(
-    store: State<'_, std::sync::Mutex<Store>>,
-) -> Result<bool, CommandError> {
+pub fn get_logs_path(store: State<'_, Mutex<Store>>) -> Result<String, CommandError> {
     let store = store
         .lock()
-        .map_err(|e| CommandError::Store(e.to_string()))?;
-    Ok(store.is_app_running())
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    Ok(store.data_dir().join("logs").to_string_lossy().into_owned())
 }
 
-/// 自动检测已安装的应用 — 返回实际存在的 profiles
-#[tauri::command]
-pub fn detect_profile() -> Result<Vec<ProfileConfig>, CommandError> {
-    Ok(config::detect_installed_profiles())
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ProfileInfo {
-    pub config_dir: String,
-    pub user_dir: Option<String>,
-    pub exists: bool,
+fn open_folder(path: &std::path::Path) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer")
+            .arg(path)
+            .spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(path).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    }
 }

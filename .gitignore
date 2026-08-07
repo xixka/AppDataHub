@@ -27,3 +27,6 @@ Thumbs.db
 *.msi
 *.exe
 *.dmg
+
+# pnpm
+.pnpm-store/

@@ -1,7 +1,4 @@
 //! WebView2Loader.dll 内嵌释放
-//!
-//! 编译时通过 include_bytes! 将 DLL 嵌入二进制，
-//! 运行时释放到临时目录并加入 DLL 搜索路径。
 
 use std::path::PathBuf;
 
