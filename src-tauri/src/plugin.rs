@@ -309,13 +309,13 @@ fn builtin_trae_cn_json() -> &'static str {
   "data_dirs": [
     {
       "path": "%APPDATA%/TRAE SOLO CN/User",
-      "label": "用户配置目录",
+      "label": "Trae用户数据",
       "include_subdirs": ["globalStorage"]
     },
     {
       "path": "%USERPROFILE%/.trae-cn",
-      "label": "用户扩展目录",
-      "include_subdirs": []
+      "label": "Trae用户扩展",
+      "include_subdirs": ["attachments", "mcps", "memory", "plugins", "skills"]
     }
   ],
   "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "History", "workspaceStorage", ".ckg", ".mcp_gallery_cache", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB"],
@@ -366,34 +366,53 @@ fn builtin_wukong_json() -> &'static str {
   ],
   "data_dirs": [
     {
-      "path": "%APPDATA%/com.dingtalk.real",
-      "label": "悟空用户数据",
+      "path": "%USERPROFILE%/.real/.bin/dws/bin/.dws",
+      "label": "悟空DWS配置",
       "include_subdirs": []
     },
     {
-      "path": "%APPDATA%/dingtalk-rewind-server",
-      "label": "Rewind服务数据",
+      "path": "%USERPROFILE%/.real/users",
+      "label": "悟空用户目录",
+      "include_subdirs": []
+    },
+    {
+      "path": "%APPDATA%/dingtalk-rewind-server/users",
+      "label": "Rewind用户数据",
       "include_subdirs": []
     }
   ],
-  "skip_items": ["Cache", "Code Cache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache", "Logs", "blob_storage", "Crashpad", ".ckg", "apm-log-recovery", "alogs", "Shared Dictionary", "WebStorage", "SharedStorage", "MediaCache", "JumpListData"],
+  "skip_items": ["Cache", "Code Cache", "DawnGraphiteCache", "DawnWebGPUCache", "GPUCache", "Logs", "blob_storage", "Crashpad", ".ckg", "apm-log-recovery", "alogs", "Shared Dictionary", "WebStorage", "SharedStorage", "MediaCache", "JumpListData", "dws.exe"],
   "machine_id": {
     "type": "file",
-    "path": "%APPDATA%/com.dingtalk.real/bin/.dws/identity.json",
+    "path": "%USERPROFILE%/.real/.bin/dws/bin/.dws/identity.json",
     "label": "悟空设备标识"
   },
   "login_artifacts": [
-    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/identity" },
-    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/im" },
+    { "type": "file", "path": "%USERPROFILE%/.real/.bin/dws/bin/.dws/token.json" },
+    { "type": "file", "path": "%USERPROFILE%/.real/.bin/dws/bin/.dws/identity.json" },
+    { "type": "file", "path": "%USERPROFILE%/.real/.bin/dws/bin/.dws/.data" },
+    { "type": "file", "path": "%USERPROFILE%/.real/.bin/dws/bin/.dws/.data.lock" },
+    { "type": "dir", "path": "%USERPROFILE%/.real/users" },
+    { "type": "dir", "path": "%USERPROFILE%/.real/.cache" },
+    { "type": "dir", "path": "%USERPROFILE%/.real/.config" },
+    { "type": "dir", "path": "%USERPROFILE%/.real/.skill-providers" },
+    { "type": "dir", "path": "%USERPROFILE%/.real/bootstrap" },
+    { "type": "dir", "path": "%USERPROFILE%/.real/.browser-extension" },
+    { "type": "file", "path": "%USERPROFILE%/.dws/settings.json" },
+    { "type": "dir", "path": "%USERPROFILE%/.dws/plugins" },
+    { "type": "dir", "path": "%APPDATA%/realdoc" },
+    { "type": "dir", "path": "%APPDATA%/dingtalk-rewind-server/users" },
+    { "type": "file", "path": "%APPDATA%/dingtalk-rewind-server/feature_flags.json" },
+    { "type": "file", "path": "%APPDATA%/dingtalk-rewind-server/legacy-migration-status.v2.json" },
     { "type": "file", "path": "%APPDATA%/com.dingtalk.real/auth.json" },
     { "type": "file", "path": "%APPDATA%/com.dingtalk.real/token-cache.json" },
     { "type": "file", "path": "%APPDATA%/com.dingtalk.real/user-cache.json" },
-    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/settings.json" },
-    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/Local State" },
-    { "type": "file", "path": "%APPDATA%/com.dingtalk.real/Preferences" },
     { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/Local Storage" },
     { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/Session Storage" },
-    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/IndexedDB" }
+    { "type": "dir", "path": "%APPDATA%/com.dingtalk.real/IndexedDB" },
+    { "type": "dir", "path": "%LOCALAPPDATA%/com.dingtalk.real/EBWebView/Default/Local Storage" },
+    { "type": "dir", "path": "%LOCALAPPDATA%/com.dingtalk.real/EBWebView/Default/Session Storage" },
+    { "type": "dir", "path": "%LOCALAPPDATA%/com.dingtalk.real/EBWebView/Default/IndexedDB" }
   ],
   "switch_flow": [
     { "type": "ensure_not_running_or_kill", "timeout": 5000 },
@@ -425,14 +444,9 @@ fn builtin_autoclaw_json() -> &'static str {
       "path": "%APPDATA%/autoclaw",
       "label": "AutoClaw用户数据",
       "include_subdirs": []
-    },
-    {
-      "path": "%USERPROFILE%/.openclaw-autoclaw",
-      "label": "工作区数据",
-      "include_subdirs": []
     }
   ],
-  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB", "SharedStorage", "MediaCache", "JumpListData", "chrome-ext", "Dictionaries", "DIPS"],
+  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB", "SharedStorage", "MediaCache", "JumpListData", "chrome-ext", "Dictionaries", "DIPS", "apm-log-recovery", "im", "launch.json", "log_sdk_v2.db", "official.json", "auth.json.backup", "settings.json.backup", "token-cache.json.backup", "user-cache.json.backup"],
   "machine_id": {
     "type": "file",
     "path": "%APPDATA%/autoclaw/identity/device.json",
@@ -483,7 +497,7 @@ fn builtin_loomy_json() -> &'static str {
       "include_subdirs": []
     }
   ],
-  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB", "SharedStorage", "MediaCache", "JumpListData", "Dictionaries", "DIPS"],
+  "skip_items": ["Cache", "GPUCache", "Code Cache", "Service Worker", "logs", "CachedData", "CachedProfilesData", "CachedConfigurations", "blob_storage", "Crashpad", "DawnGraphiteCache", "DawnWebGPUCache", "VMCache", "Shared Dictionary", "WebStorage", "ModularData", "monitor", "Partitions", "Backups", "Network", "Session Storage", "Local Storage", "IndexedDB", "SharedStorage", "MediaCache", "JumpListData", "Dictionaries", "DIPS", "loomy-installer-trace.log", "nexus-debug.log", "update-trace.log", "app-update-runtime.yml"],
   "machine_id": {
     "type": "file",
     "path": "%APPDATA%/loomy/app-ui-state.json",

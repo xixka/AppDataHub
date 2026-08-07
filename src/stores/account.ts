@@ -62,6 +62,11 @@ export const useAccountStore = defineStore("accounts", () => {
     }
   }
 
+  async function saveSnapshot(accountId: string, pluginId: string) {
+    await api.saveSnapshot(accountId);
+    await load(pluginId);
+  }
+
   async function clearLogin(pluginId: string) {
     const result = await api.clearLoginState(pluginId);
     if (!result.success && result.error) {
@@ -79,6 +84,7 @@ export const useAccountStore = defineStore("accounts", () => {
     update,
     remove,
     switchTo,
+    saveSnapshot,
     clearLogin,
   };
 });

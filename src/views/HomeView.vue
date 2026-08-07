@@ -41,7 +41,6 @@
             :key="acc.id"
             :account="acc"
             @switch="onSwitch"
-            @save="onSave"
             @edit="onEdit"
             @delete="onDelete"
           />

@@ -1,7 +1,9 @@
 //! 账号仓库 — 本地持久化存储
 //!
-//! 数据文件: {app_data_dir}/accounts.json
-//! 配置快照: {app_data_dir}/snapshots/{plugin_id}/{account_id}/
+//! 每个账号快照自包含:
+//!   {app_data_dir}/snapshots/{plugin_id}/{account_name}/
+//!     ├── account.json   ← 账号元数据
+//!     └── <data_dir_label>/  ← 备份的数据目录
 
 use std::fs;
 use std::path::PathBuf;
@@ -30,28 +32,21 @@ pub enum StoreError {
     Other(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct StoreData {
-    pub accounts: Vec<Account>,
-    pub settings: FlowSettings,
-}
-
 pub struct Store {
     data_dir: PathBuf,
     snapshots_dir: PathBuf,
-    accounts_file: PathBuf,
-    data: StoreData,
+    accounts: Vec<Account>,
+    settings: FlowSettings,
 }
 
 impl Store {
     pub fn new(data_dir: PathBuf) -> Self {
         let snapshots_dir = data_dir.join("snapshots");
-        let accounts_file = data_dir.join("accounts.json");
         Self {
             data_dir,
             snapshots_dir,
-            accounts_file,
-            data: StoreData::default(),
+            accounts: Vec::new(),
+            settings: FlowSettings::default(),
         }
     }
 
@@ -67,25 +62,72 @@ impl Store {
         fs::create_dir_all(&self.data_dir)?;
         fs::create_dir_all(&self.snapshots_dir)?;
 
-        if self.accounts_file.exists() {
-            let content = fs::read_to_string(&self.accounts_file)?;
-            self.data = serde_json::from_str(&content).unwrap_or_default();
-        } else {
-            self.data = StoreData::default();
-            self.save()?;
+        // 兼容迁移：旧的 accounts.json → 各快照目录里的 account.json
+        let old_accounts_file = self.data_dir.join("accounts.json");
+        if old_accounts_file.exists() {
+            self.migrate_old_accounts(&old_accounts_file)?;
+            // 迁移完成后删除旧文件
+            let _ = fs::remove_file(&old_accounts_file);
+        }
+
+        // 遍历 snapshots 目录加载账号
+        self.accounts.clear();
+        for plugin_entry in fs::read_dir(&self.snapshots_dir)? {
+            let plugin_entry = plugin_entry?;
+            if !plugin_entry.file_type()?.is_dir() {
+                continue;
+            }
+            for account_entry in fs::read_dir(plugin_entry.path())? {
+                let account_entry = account_entry?;
+                if !account_entry.file_type()?.is_dir() {
+                    continue;
+                }
+                let account_json = account_entry.path().join("account.json");
+                if account_json.exists() {
+                    match fs::read_to_string(&account_json) {
+                        Ok(content) => {
+                            if let Ok(mut acc) = serde_json::from_str::<Account>(&content) {
+                                // 校验快照目录实际存在
+                                acc.has_snapshot = snapshot_has_data(&account_entry.path());
+                                self.accounts.push(acc);
+                            }
+                        }
+                        Err(_) => continue,
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 将旧的 accounts.json 迁移到各快照目录
+    fn migrate_old_accounts(&self, old_file: &PathBuf) -> Result<(), StoreError> {
+        let content = fs::read_to_string(old_file)?;
+        let old_data: OldStoreData = serde_json::from_str(&content).unwrap_or_default();
+        for acc in &old_data.accounts {
+            let snapshot_dir = self.snapshots_dir.join(&acc.plugin_id).join(&acc.name);
+            if snapshot_dir.exists() {
+                let account_json = snapshot_dir.join("account.json");
+                let json = serde_json::to_string_pretty(acc)?;
+                fs::write(&account_json, json)?;
+            }
         }
         Ok(())
     }
 
-    pub fn save(&self) -> Result<(), StoreError> {
-        let content = serde_json::to_string_pretty(&self.data)?;
-        fs::write(&self.accounts_file, content)?;
+    /// 保存单个账号元数据到其快照目录
+    fn save_account_meta(&self, account: &Account) -> Result<(), StoreError> {
+        let snapshot_dir = self.snapshots_dir.join(&account.plugin_id).join(&account.name);
+        fs::create_dir_all(&snapshot_dir)?;
+        let account_json = snapshot_dir.join("account.json");
+        let json = serde_json::to_string_pretty(account)?;
+        fs::write(&account_json, json)?;
         Ok(())
     }
 
     pub fn list_accounts(&self, plugin_id: &str) -> Vec<AccountMetadata> {
-        self.data
-            .accounts
+        self.accounts
             .iter()
             .filter(|a| a.plugin_id == plugin_id)
             .map(Into::into)
@@ -100,9 +142,8 @@ impl Store {
         machine_id: Option<String>,
         plugin: &PluginConfig,
     ) -> Result<Account, StoreError> {
-        // 检查重名
+        // 检查重名（同插件下）
         if self
-            .data
             .accounts
             .iter()
             .any(|a| a.plugin_id == plugin_id && a.name == name)
@@ -111,43 +152,40 @@ impl Store {
         }
 
         let mut acc = Account::new(name, None, note, plugin_id.clone());
-
-        // 如果有机器码定义, 绑定当前机器码
         acc.bound_machine_id = machine_id;
 
-        self.data.accounts.push(acc.clone());
+        // 创建快照目录并保存元数据
+        let snapshot_dir = self.snapshots_dir.join(&acc.plugin_id).join(&acc.name);
+        fs::create_dir_all(&snapshot_dir)?;
+        self.save_account_meta(&acc)?;
 
-        // 自动保存当前快照
-        let snapshot_dir = self.snapshots_dir.join(&plugin_id).join(&acc.name);
+        // 自动执行备份
         let ctx = FlowContext {
             plugin: plugin.clone(),
             account: acc.clone(),
-            snapshot_dir,
-            settings: self.data.settings.clone(),
+            snapshot_dir: snapshot_dir.clone(),
+            settings: self.settings.clone(),
         };
         let backup_step = crate::plugin::FlowStep::BackupCurrent;
         let _ = flow::execute_flow(&ctx, std::slice::from_ref(&backup_step));
-        acc.has_snapshot = true;
-        // 更新 pushed account 的 has_snapshot
-        if let Some(a) = self.data.accounts.last_mut() {
-            a.has_snapshot = true;
-        }
+        acc.has_snapshot = snapshot_has_data(&snapshot_dir);
 
-        self.save()?;
+        // 更新保存 has_snapshot 后的元数据
+        self.save_account_meta(&acc)?;
+        self.accounts.push(acc.clone());
+
         Ok(acc)
     }
 
     pub fn get_account(&self, id: &str) -> Result<&Account, StoreError> {
-        self.data
-            .accounts
+        self.accounts
             .iter()
             .find(|a| a.id == id)
             .ok_or_else(|| StoreError::NotFound(id.to_string()))
     }
 
     pub fn get_account_mut(&mut self, id: &str) -> Result<&mut Account, StoreError> {
-        self.data
-            .accounts
+        self.accounts
             .iter_mut()
             .find(|a| a.id == id)
             .ok_or_else(|| StoreError::NotFound(id.to_string()))
@@ -159,21 +197,18 @@ impl Store {
         name: String,
         note: Option<String>,
     ) -> Result<(), StoreError> {
-        // 先取旧名字用于迁移快照
         let old_name = self.get_account(id)?.name.clone();
         let plugin_id = self.get_account(id)?.plugin_id.clone();
 
         let acc = self.get_account_mut(id)?;
-        let new_name = name.clone();
-        acc.name = name;
+        acc.name = name.clone();
         acc.note = note;
 
         // 如果名字变了，迁移快照目录
-        if old_name != new_name {
+        if old_name != name {
             let old_dir = self.snapshots_dir.join(&plugin_id).join(&old_name);
-            let new_dir = self.snapshots_dir.join(&plugin_id).join(&new_name);
+            let new_dir = self.snapshots_dir.join(&plugin_id).join(&name);
             if old_dir.exists() {
-                // 如果新目录已存在，先删除
                 if new_dir.exists() {
                     let _ = fs::remove_dir_all(&new_dir);
                 }
@@ -181,7 +216,11 @@ impl Store {
             }
         }
 
-        self.save()?;
+        // 更新元数据
+        let acc = self.get_account(id)?;
+        let acc_clone = acc.clone();
+        self.save_account_meta(&acc_clone)?;
+
         Ok(())
     }
 
@@ -189,13 +228,12 @@ impl Store {
         let acc = self.get_account(id)?;
         let plugin_id = acc.plugin_id.clone();
         let acc_name = acc.name.clone();
-        // 删除快照
+        // 删除整个快照目录（包括 account.json 和备份数据）
         let snapshot_dir = self.snapshots_dir.join(&plugin_id).join(&acc_name);
         if snapshot_dir.exists() {
             let _ = fs::remove_dir_all(&snapshot_dir);
         }
-        self.data.accounts.retain(|a| a.id != id);
-        self.save()?;
+        self.accounts.retain(|a| a.id != id);
         Ok(())
     }
 
@@ -210,17 +248,20 @@ impl Store {
         let ctx = FlowContext {
             plugin: plugin.clone(),
             account: acc,
-            snapshot_dir,
-            settings: self.data.settings.clone(),
+            snapshot_dir: snapshot_dir.clone(),
+            settings: self.settings.clone(),
         };
 
         // 执行 backup_current 步骤
         let backup_step = crate::plugin::FlowStep::BackupCurrent;
         let _ = flow::execute_flow(&ctx, std::slice::from_ref(&backup_step));
 
+        // 更新 has_snapshot 并重写 account.json
         let acc = self.get_account_mut(account_id)?;
-        acc.has_snapshot = true;
-        self.save()?;
+        acc.has_snapshot = snapshot_has_data(&snapshot_dir);
+        let acc_clone = acc.clone();
+        self.save_account_meta(&acc_clone)?;
+
         Ok(())
     }
 
@@ -229,22 +270,24 @@ impl Store {
         account_id: &str,
         plugin: &PluginConfig,
     ) -> Result<crate::flow::FlowResult, StoreError> {
-        // 直接用目标账号执行切换流程，不依赖"当前活跃"判断
         let snapshot_dir = self.snapshots_dir.join(&plugin.id).join(
             self.get_account(account_id)?.name.clone()
         );
         let acc = self.get_account_mut(account_id)?;
         acc.last_used_at = Some(Utc::now());
+        let acc_clone = acc.clone();
+
+        // 更新 last_used_at
+        self.save_account_meta(&acc_clone)?;
+
         let ctx = FlowContext {
             plugin: plugin.clone(),
-            account: acc.clone(),
+            account: acc_clone,
             snapshot_dir,
-            settings: self.data.settings.clone(),
+            settings: self.settings.clone(),
         };
 
         let result = flow::execute_flow(&ctx, &plugin.switch_flow);
-
-        self.save()?;
         Ok(result)
     }
 
@@ -270,7 +313,7 @@ impl Store {
             plugin: plugin.clone(),
             account: dummy_account,
             snapshot_dir,
-            settings: self.data.settings.clone(),
+            settings: self.settings.clone(),
         };
 
         let result = flow::execute_flow(&ctx, &plugin.clear_login_flow);
@@ -278,24 +321,59 @@ impl Store {
     }
 
     pub fn get_settings(&self) -> &FlowSettings {
-        &self.data.settings
+        &self.settings
     }
 
     pub fn update_settings(&mut self, settings: FlowSettings) -> Result<(), StoreError> {
-        self.data.settings = settings;
-        self.save()?;
+        self.settings = settings;
         Ok(())
     }
 
-    /// 导出所有数据为 JSON
+    /// 导出所有数据为 JSON (accounts + 各快照元数据)
     pub fn export_data(&self) -> Result<String, StoreError> {
-        Ok(serde_json::to_string_pretty(&self.data)?)
+        #[derive(Serialize)]
+        struct ExportData<'a> {
+            accounts: &'a [Account],
+        }
+        let data = ExportData {
+            accounts: &self.accounts,
+        };
+        Ok(serde_json::to_string_pretty(&data)?)
     }
 
     /// 导入 JSON 数据
     pub fn import_data(&mut self, json: &str) -> Result<(), StoreError> {
-        self.data = serde_json::from_str(json)?;
-        self.save()?;
+        #[derive(Deserialize)]
+        struct ImportData {
+            accounts: Vec<Account>,
+        }
+        let data: ImportData = serde_json::from_str(json)?;
+        self.accounts = data.accounts;
+        // 重写每个账号的 account.json
+        for acc in &self.accounts {
+            self.save_account_meta(acc)?;
+        }
         Ok(())
     }
+}
+
+/// 检查快照目录中是否有实际备份数据（排除 account.json 本身）
+fn snapshot_has_data(snapshot_dir: &std::path::Path) -> bool {
+    if let Ok(entries) = fs::read_dir(snapshot_dir) {
+        entries
+            .filter_map(|e| e.ok())
+            .any(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name != "account.json" && name != "__clear__"
+            })
+    } else {
+        false
+    }
+}
+
+/// 旧的 StoreData 结构，仅用于迁移
+#[derive(Debug, Clone, Deserialize, Default)]
+struct OldStoreData {
+    #[serde(default)]
+    accounts: Vec<Account>,
 }

@@ -26,6 +26,15 @@
           切换
         </el-button>
 
+        <el-button
+          text
+          size="small"
+          :loading="saving"
+          @click="onSaveSnapshot"
+        >
+          保存快照
+        </el-button>
+
         <el-button text size="small" @click="$emit('edit', account)">编辑</el-button>
         <el-button text size="small" type="danger" @click="$emit('delete', account.id)">删除</el-button>
       </div>
@@ -34,8 +43,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { ElMessage } from "element-plus";
 import { useAccountStore } from "@/stores/account";
+import { usePluginStore } from "@/stores/plugin";
 import type { AccountMetadata } from "@/types";
 
 const props = defineProps<{ account: AccountMetadata }>();
@@ -46,6 +57,21 @@ defineEmits<{
 }>();
 
 const accountStore = useAccountStore();
+const pluginStore = usePluginStore();
+const saving = ref(false);
+
+async function onSaveSnapshot() {
+  if (!pluginStore.activePluginId) return;
+  saving.value = true;
+  try {
+    await accountStore.saveSnapshot(props.account.id, pluginStore.activePluginId);
+    ElMessage.success("快照已保存");
+  } catch (e) {
+    ElMessage.error("保存快照失败: " + e);
+  } finally {
+    saving.value = false;
+  }
+}
 
 const avatarUrl = computed(() => {
   const colors = ["#3b82f6", "#8b5cf6", "#14b8a6", "#f43f5e", "#d946ef"];
